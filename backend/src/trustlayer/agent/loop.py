@@ -350,12 +350,22 @@ async def run_agent_loop(
         aggregate_grounding = calculate_grounding_score(claim_verifications)
         grounding_score = aggregate_grounding["grounding_score"]
         grounding_risk = aggregate_grounding["grounding_risk"]
-    else:
-        # No policy claims made in the prompt (e.g. straightforward "transfer $150 to Bob")
+    elif not extracted_claims:
+        # (a) No policy claims in the prompt (e.g. "transfer $150 to Bob") — grounding is N/A, not failed.
         aggregate_grounding = calculate_grounding_score([])
         grounding_score = 1.0
         grounding_risk = 0.0
         grounding_error = None
+    else:
+        # (b) Claims were extracted but every per-claim retrieval/NLI call raised an exception.
+        # This is a grounding infrastructure failure, not a clean pass.  Propagate
+        # grounding_error so evaluate_decision applies fail-safe logic (money-moving
+        # tools → minimum APPROVE; read-only tools → fail-open with warning).
+        aggregate_grounding = calculate_grounding_score([])
+        grounding_score = None  # signals failure to evaluate_decision
+        grounding_risk = 1.0
+        if not grounding_error:
+            grounding_error = "all_claims_verification_failed"
 
     log_structured_event(
         request_id=req_id,
@@ -372,29 +382,45 @@ async def run_agent_loop(
     # ── Parallel Branch B: Policy Engine (Module 2) ───────────────────────────
     log_structured_event(req_id, stage="policy", event="policy_checks_started", data={"role": role, "tool": intent})
 
-    rbac_res = check_rbac(role=role, tool_name=intent, params=params)
-    seq_res = await check_sequence_anomaly(
-        session=session,
-        user_id=user_id,
-        session_id=session_id,
-        tool_name=intent,
-        params=params,
-    )
+    policy_error: str | None = None
+    try:
+        rbac_res = check_rbac(role=role, tool_name=intent, params=params)
+        seq_res = await check_sequence_anomaly(
+            session=session,
+            user_id=user_id,
+            session_id=session_id,
+            tool_name=intent,
+            params=params,
+        )
 
-    # Combined policy risk: elevated if sequence anomaly or RBAC deny
-    if rbac_res["hard_deny"]:
+        # Combined policy risk: elevated if sequence anomaly or RBAC deny
+        if rbac_res["hard_deny"]:
+            policy_risk = 1.0
+        else:
+            policy_risk = float(seq_res.get("policy_risk", 0.0))
+
+        policy_data = {
+            "rbac_allowed": rbac_res["allowed"],
+            "rbac_hard_deny": rbac_res["hard_deny"],
+            "rbac_reason": rbac_res["reason"],
+            "sequence_anomaly_flag": seq_res["flagged"],
+            "sequence_reason": seq_res.get("reason"),
+            "policy_risk": policy_risk,
+        }
+    except Exception as exc:
+        logger.error("Policy engine runtime exception: %s. Will route to fail-closed BLOCK.", exc)
+        policy_error = str(exc)
         policy_risk = 1.0
-    else:
-        policy_risk = float(seq_res.get("policy_risk", 0.0))
-
-    policy_data = {
-        "rbac_allowed": rbac_res["allowed"],
-        "rbac_hard_deny": rbac_res["hard_deny"],
-        "rbac_reason": rbac_res["reason"],
-        "sequence_anomaly_flag": seq_res["flagged"],
-        "sequence_reason": seq_res.get("reason"),
-        "policy_risk": policy_risk,
-    }
+        rbac_res = {"allowed": False, "hard_deny": True, "reason": f"policy engine error: {exc}"}
+        seq_res = {"flagged": False}
+        policy_data = {
+            "rbac_allowed": False,
+            "rbac_hard_deny": True,
+            "rbac_reason": f"policy engine error: {exc}",
+            "sequence_anomaly_flag": False,
+            "sequence_reason": None,
+            "policy_risk": 1.0,
+        }
 
     log_structured_event(
         request_id=req_id,
@@ -411,6 +437,7 @@ async def run_agent_loop(
         rbac_hard_deny=rbac_res["hard_deny"],
         tool_name=intent,
         grounding_error=grounding_error,
+        policy_error=policy_error,
     )
     decision = decision_res["decision"]
 
