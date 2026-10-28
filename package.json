@@ -1,0 +1,25 @@
+{
+  "name": "trustlayer-monorepo",
+  "version": "0.1.0",
+  "private": true,
+  "description": "TrustLayer — Access-Aware RAG Gateway & Policy Firewall",
+  "scripts": {
+    "dev:backend": "cd backend && uv run uvicorn trustlayer.main:app --reload --port 8000",
+    "dev:frontend": "cd frontend && npm run dev",
+    "dev": "npm run build && cd backend && uv run uvicorn trustlayer.main:app --reload --port 8000",
+    "build": "cd frontend && npm run build",
+    "start": "cd backend && uv run uvicorn trustlayer.main:app --port 8000",
+    "test:backend": "cd backend && uv run pytest src/trustlayer/test_safety_fixes.py -v",
+    "test": "npm run test:backend && npm run build"
+  },
+  "keywords": [
+    "trustlayer",
+    "rag",
+    "ai-safety",
+    "fastapi",
+    "react",
+    "banking"
+  ],
+  "author": "Aquib Ahmad"
+}
+

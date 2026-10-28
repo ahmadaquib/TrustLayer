@@ -10,16 +10,17 @@ from pathlib import Path
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
-# Resolve the .env file relative to this file's location:
-# config.py -> src/trustlayer/ ... backend/.env
-_ENV_FILE = Path(__file__).resolve().parents[2] / ".env"
+# Resolve .env files relative to this file's location:
+# config.py -> src/trustlayer/ ... backend/.env and project root .env
+_BACKEND_ENV = Path(__file__).resolve().parents[2] / ".env"
+_ROOT_ENV = Path(__file__).resolve().parents[3] / ".env"
 
 
 class Settings(BaseSettings):
     """Central configuration – values come from environment / .env file."""
 
     model_config = SettingsConfigDict(
-        env_file=str(_ENV_FILE),
+        env_file=(str(_ROOT_ENV), str(_BACKEND_ENV)),
         env_file_encoding="utf-8",
         extra="ignore",
     )
@@ -51,7 +52,7 @@ if settings.hf_token:
 hf_cache_dir = settings.hf_home.strip() if settings.hf_home else "./models_cache"
 cache_path = Path(hf_cache_dir)
 if not cache_path.is_absolute():
-    cache_path = (_ENV_FILE.parent / cache_path).resolve()
+    cache_path = (_BACKEND_ENV.parent / cache_path).resolve()
 else:
     cache_path = cache_path.resolve()
 

@@ -170,10 +170,10 @@ Safety floors cannot be overridden or edited from the policy console for any ban
 
 ### 6.2 Fail-Safe Behaviors `[IMPLEMENTED]`
 - **Grounding Infrastructure Failure (Gemini/NLI timeout or crash):**
-  - Money-moving actions: Floor enforced at `APPROVE`, logged as `event = 'grounding_unavailable'`. Never fail-open.
+  - Money-moving actions: Floor enforced at `APPROVE`, logged as `event = 'grounding_unavailable'`. Never fail-open. (Fixed in `agent/loop.py`: distinguished case (a) zero claims [grounding N/A] from case (b) complete verification failure [fails safe to APPROVE/BLOCK]).
   - Read-only actions (`check_balance`, `get_transactions`): Fail-open with warning logged.
 - **Policy Engine Failure (OPA / Python exception):**
-  - Fail-closed: Forces immediate `BLOCK` (`policy_risk = 1.0`), logged as `event = 'policy_engine_error'`.
+  - Fail-closed: Forces immediate `BLOCK` (`policy_risk = 1.0`), logged as `event = 'policy_engine_error'`. (Fixed in `agent/loop.py`: wrapped `check_rbac` and `check_sequence_anomaly` so runtime exceptions route through `evaluate_decision(policy_error=...)` with an audit record rather than an unhandled HTTP 500).
 
 ---
 

@@ -4,19 +4,22 @@ node_modules/
 
 # Build outputs
 dist/
+dist-ssr/
 build/
 
 # Python artifacts
 __pycache__/
-*.pyc
+*.py[oc]
 *.pyo
 *.egg-info/
 wheels/
+.pytest_cache/
 
 # Environment files (keep .env.example, ignore actual .env)
 .env
 .env.local
 .env.*.local
+*.local
 
 # OS files
 .DS_Store
@@ -33,8 +36,13 @@ Thumbs.db
 *.sw?
 
 # Logs
+logs/
 *.log
 npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
 
 # Lock files (uv)
 # uv.lock is intentionally tracked

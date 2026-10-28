@@ -234,4 +234,11 @@ Next step: You may reduce the amount or submit an application for an account tie
 - **Information Boundary & Scoping Constraints:**
   - The message may name **only the user's own authenticated bank, role, and tier limits and entitlements plus the next step** (e.g. reduce transfer amount or request account tier upgrade).
   - It must **never reveal another tier's limits or rules** (e.g. never disclose Gold or Platinum limits, caps, or perks to a Standard user).
-  - It must **never expose internal risk scores** (`final_risk`, `grounding_risk`, `policy_risk`), internal model confidences, system prompts, or backend security flags.
+  - It must **never expose internal risk scores** (`final_risk`, `grounding_risk`, `policy_risk`), internal model confidences, system prompts, or backend security flags.### 4.1 Current Implementation & Verified Fail-Safe Paths [IMPLEMENTED]
+- **Policy Engine Failure (Fixed):** In gent/loop.py, check_rbac and check_sequence_anomaly are wrapped in a robust exception handler. Any runtime error routes directly to evaluate_decision(policy_error=...), resulting in an audited, logged **BLOCK** (policy_risk = 1.0, inal_risk = 1.0, event = 'policy_engine_error') rather than an unhandled HTTP 500.
+- **Grounding Engine Failure (Fixed):** In gent/loop.py, the aggregation logic distinguishes between prompts where zero claims were extracted (case a: grounding N/A, grounding_score = 1.0, grounding_error = None) and prompts where claims were extracted but all per-claim retrieval/NLI calls raised an exception (case b: infrastructure failure). Under case (b), grounding_error is propagated and grounding_score = None, ensuring evaluate_decision enforces:
+  - If the action is read-only (check_balance, get_transactions), it fails open with grounding_score = 1.0 and logs event = 'grounding_unavailable'.
+  - If the action is classified as money-moving (	ransfer_funds, lock_card, dispute_charge, waive_fee, override_hold), it sets grounding_score = 0.0, resulting in a minimum of APPROVE (or BLOCK).
+- **Resolved Code Gap:** The previous issue where empty claim_verifications unconditionally reset grounding_error = None and grounding_score = 1.0 has been fixed and verified with regression test suite 	est_safety_fixes.py. Money-moving actions with failed claim verification never fail open.
+
+
