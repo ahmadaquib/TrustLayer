@@ -1,159 +1,199 @@
 # Doc 02 — Technical Requirements Document (TRD)
 
-**Project:** TrustLayer — Banking Support Assistant Case Study
+**Project:** TrustLayer — Banking Support Assistant Case Study (Multi-Bank, Tiered)  
+**Status Tagging:** Every component is explicitly designated as `[IMPLEMENTED]` (operational in current prototype) or `[PLANNED]` (target architecture per Panel Review & Final Architecture v1.0).
 
 ---
 
-## 1. Tech Stack
+## 1. Target Tech Stack
 
-| Layer | Choice | Notes |
-|---|---|---|
-| Backend framework | FastAPI | Also hosts the tool-call interception point directly (no MCP layer) |
-| Database | PostgreSQL + pgvector | Single local instance; replaces Qdrant for zero-budget/offline constraint |
-| Embeddings | BGE-M3 (`BAAI/bge-m3`) | Runs locally, cached under `backend/models_cache` via `HF_HOME`/`HF_HUB_CACHE`; embedding dimension confirmed 1024 |
-| Claim extraction | Gemini API (`gemini-flash-latest`, fallback `gemini-flash-lite-latest`) | Cloud call; introduces an internet + API-key runtime dependency (see Doc 01 NFR2). Auth uses Google's newer `AQ.`-prefix key format (Google is phasing out legacy `AIzaSy...` keys). Falls back to a deterministic heuristic sentence-splitter extractor if both models fail after retry |
-| NLI verification | `cross-encoder/nli-deberta-v3-base` | Entailment/contradiction/neutral classification, run sentence-level (not full-chunk) to avoid cross-attention dilution on multi-sentence evidence — see §3 below |
-| Agent orchestration | Custom rule-based intent-detection loop (`agent/loop.py`) | Reasoning + proposed tool call step; not LangGraph — kept simpler for the build timeline |
-| Policy engine | Custom RBAC + rule-based sequence check | Replaces OPA + Neo4j/NetworkX from original design |
-| Frontend | React + Vite (structural reference only from an unrelated prior project) | Not yet started |
-| Coding tool | Google Antigravity | Chosen over OpenAI Codex — free, multi-agent, browser-based verification |
-| Fine-tuning compute | Google Colab (free tier) | One-time only, not part of runtime |
-| Local dev dependency | Docker Desktop, running `pgvector/pgvector:pg16` | Used only to host local Postgres+pgvector for development — unrelated to the "no Docker sandbox for tool execution" decision in Doc 01 §6, which is about runtime tool-call isolation, not dev infra |
+| Layer | Choice | Status | Technical Details & Architectural Rationale |
+|---|---|---|---|
+| **Agent Orchestration** | LangGraph with Gemini (`gemini-flash-latest` / `gemini-flash-lite-latest`) | `[PLANNED]` | Replaces the interim rule-based intent loop (`agent/loop.py` `[IMPLEMENTED]`). Enables genuine autonomous multi-turn reasoning and tool invocation traces. |
+| **Interception Layer** | FastAPI Gateway | `[IMPLEMENTED]` | Intercepts proposed tool calls at the agent execution boundary before any side-effect occurs. |
+| **Embeddings** | BGE-M3 (`BAAI/bge-m3`) | `[IMPLEMENTED]` | Local offline inference, 1024-dim dense embeddings cached locally (`backend/models_cache`). |
+| **Vector Store** | Qdrant (Embedded Mode) | `[PLANNED]` | Sits behind an abstract vector-store interface. Runs in-process (embedded engine) to conserve RAM; replaces interim `pgvector` (`[IMPLEMENTED]`). |
+| **Claim Extraction** | Gemini API (structured JSON output) | `[IMPLEMENTED]` | Cloud extraction with a deterministic sentence-splitter heuristic fallback (`[IMPLEMENTED]`) when API is unreachable. |
+| **NLI Verification** | `cross-encoder/nli-deberta-v3-base` | `[IMPLEMENTED]` | Local inference; sentence-level candidate matching against evidence chunks to avoid cross-attention dilution. |
+| **Policy Engine** | Open Policy Agent (OPA) | `[PLANNED]` | Fixed Rego governance rules evaluating bank configuration pushed as JSON data. Replaces interim Python RBAC (`[IMPLEMENTED]`). |
+| **Workflow / Dependency Graph** | NetworkX (default) with optional Neo4j adapter | `[PLANNED]` | Enforces prerequisite action sequences behind a graph interface (e.g., verify identity $\rightarrow$ check balance $\rightarrow$ transfer). NetworkX is the default in-memory engine; Neo4j is an optional adapter if time and memory allow (JVM heap capped at ~512 MB). Replaces single rule-based sequence check (`[IMPLEMENTED]`). |
+| **Risk / Decision Engine** | 5-Input Weighted Fusion + Fixed Safety Floors | `[PLANNED]` | Fuses grounding risk, policy risk, graph status, tool sensitivity, and context risk. (No XGBoost due to zero training data). Supersedes 2-input formula (`[IMPLEMENTED]`). |
+| **Execution Sandbox** | Docker Sandbox (Isolated Container) | `[PLANNED]` | Tool execution with no network access and a read-only filesystem against the mock ledger. Upgrades in-process mock ledger (`[IMPLEMENTED]`). |
+| **Audit & Storage** | PostgreSQL | `[IMPLEMENTED]` | Stores users, accounts, transactions, audit log, and decision records with fixed-precision `NUMERIC(5,4)` scores. |
+| **Management UI** | React + Vite Dashboard & Policy Console | `[PLANNED]` | UI for decisions, approvals, analytics, layered policy configuration, and KB document upload. (Endpoints `[IMPLEMENTED]`). |
+| **Agent Benchmarking** | OpenClaw | `[PLANNED]` | Optional generality demo framework; strictly out of core scope. |
 
-## 2. System Architecture
+---
 
+## 2. System Architecture & Memory Budget
+
+### 2.1 End-to-End Pipeline
 ```
-User (Customer/Staff/Approver)
-        |
-        v
-   FastAPI Gateway (auth, role resolution, session mgmt)
-        |
-        v
-   Agent (reasoning) --------------------> proposes tool call + generates response
-        |
-        v
-   TrustLayer Interception Layer
-        |
-        +---------------------+----------------------+
-        |                                             |
-        v                                             v
-   Module 1: Claim Grounding                  Module 2: Policy/RBAC
-   - Extract claims (Gemini API)                  - Check role permissions
-   - Access-aware retrieval                   - Sequence anomaly check
-     (BGE-M3 -> pgvector, role-filtered)       - Compute policy_risk
-   - NLI verify (sentence-level DeBERTa-v3)
-   - Compute grounding_risk (graduated)
-        |                                             |
-        +---------------------+----------------------+
-                              |
-                              v
-                     Decision Engine
-              (hard overrides + weighted score)
-                              |
-              +---------------+----------------+
-              |               |                |
-              v               v                v
-           ALLOW           BLOCK           APPROVE
-              |                                |
-              v                                v
-     Execute against mock          Route to Senior Staff/
-     bank ledger (DB)              Approver role
-              |
-              v
-      Audit Log (Postgres) + Structured Logs (shared request_id)
-              |
-              v
-      Admin Analytics Dashboard
-```
-
-## 3. Module 1 — Claim Grounding, Detailed
-
-1. Agent produces a response referencing a claim (e.g. "your account is eligible for a fee waiver").
-2. A Gemini API call extracts atomic claims from the response (structured/JSON output mode). If the API is unavailable after retry, a deterministic heuristic sentence-splitter is used as a fallback extractor (see §6).
-3. Each claim is embedded (BGE-M3) and used to retrieve top-k evidence chunks from `kb_embeddings`, filtered by the requesting user's `role_scope` (access-aware retrieval).
-4. **Sentence-level NLI matching:** rather than scoring a claim against a full multi-sentence evidence chunk directly, each retrieved chunk is split into candidate sentences and the claim is scored against each sentence individually. This avoids a measured failure mode where DeBERTa-v3's cross-attention gets diluted on long paragraphs, masking a word-for-word entailing sentence as NEUTRAL. If any sentence yields entailment probability > 0.5, the chunk is classified ENTAILED using that sentence.
-5. **Relevance-gated contradiction:** a retrieved chunk with low similarity to the claim (`sim < 0.65`) is excluded from contributing a CONTRADICTED label — this prevents topically unrelated "distractor" chunks (e.g. a travel-fee policy retrieved alongside an overdraft-fee claim) from falsely registering as contradicting evidence.
-6. **Grounding score aggregation (graduated, not binary veto):**
-   - Base score: `GS_base = mean(best_entailment_probability_i)` across all extracted sub-claims `i` of the original claim.
-   - Contradiction penalty: `penalty = mean(P(contradiction) for contradicted sub-claims) * (num_contradicted / num_total)`.
-   - `grounding_score = max(0.0, GS_base * (1.0 - penalty))`.
-   - `grounding_risk = 1.0 - grounding_score`.
-   - This replaces an earlier binary "any contradiction zeroes the score" rule, which was found (via the Week 2 test suite) to incorrectly collapse multi-clause true claims to 0.0 whenever any one sub-clause was mis-scored — the graduated formula preserves partial-credit signal from correctly-entailed sub-claims.
-
-**Validated behavior (Week 2 test suite, `test_grounding.py`, 10 hand-crafted cases):** 8/10 passing with the two remaining gaps root-caused to DeBERTa-v3 sensitivity to pronoun framing ("by you" vs. "by the customer") and assertion-vs-policy tense framing ("has been charged" vs. conditional policy language) — noted as a documented NLI limitation, not a pipeline bug, and a candidate topic for the paper's limitations section.
-
-## 4. Module 2 — Policy/RBAC, Detailed
-
-1. Look up the proposed tool call + parameters against the role's permitted action set (concrete matrix defined in `policy/rbac.py` and reproduced below).
-2. **Hard deny** if the role is not permitted to perform this action at all. Hard deny sets `policy_risk = 1.0` and forces BLOCK regardless of grounding.
-3. **Sequence-anomaly rule check (concrete parameters, as implemented):** flags a pattern where `check_balance` is followed, within **5 minutes**, by `transfer_funds` draining **≥85% of the account balance**, without intermediate re-authentication. This sets `policy_risk = 0.8` when triggered.
-4. `policy_risk` ranges 0 (clean) to 1 (hard violation), with the 0.8 intermediate value for sequence-anomaly flags as implemented above.
-
-**RBAC permission matrix (as implemented in `policy/rbac.py`):**
-
-| Role | check_balance | get_transactions | transfer_funds | block_card | dispute_charge |
-|---|---|---|---|---|---|
-| customer | allow | allow | allow | allow | deny |
-| staff | allow | allow | deny | allow | allow |
-| approver | allow | allow | allow | allow | allow |
-
-Administrative tools (`waive_fee`, `increase_limit`, `override_hold`) also exist in the matrix, restricted to staff/approver. Both denial paths were verified end to end on real seeded roles (customer calling `dispute_charge`, staff calling `transfer_funds`): decision `block`, `final_risk = 1.0`, tool never executed.
-
-## 5. Decision Logic
-
-**Step 1 — Hard overrides (checked before the weighted score):**
-- RBAC hard deny → **BLOCK**, unconditionally (`policy_risk = 1.0`).
-- `grounding_score < 0.4` on any money-moving action → minimum **APPROVE**, never ALLOW outright. **Money-moving actions** are defined by the `MONEY_MOVING_TOOLS` set in `policy/rbac.py`: `transfer_funds`, `block_card`, `dispute_charge`, plus the administrative `waive_fee` and `override_hold`. Confirmed in code, and confirmed by live tests: a customer calling `block_card` and a staff member calling `dispute_charge`, each with a deliberately hallucinated claim and `policy_risk = 0.0`, both returned APPROVE (grounding_score ≈ 0, final_risk = 0.5) and were never ALLOWED. Note that under the current 0.5/0.5 weighting these outcomes are produced by the weighted formula itself, not by the floor rule (see the redundancy finding below), so tool-set membership only becomes load-bearing if the weights are ever changed.
-
-**Step 2 — Weighted score:**
-```
-final_risk = 0.5 * grounding_risk + 0.5 * policy_risk
-
-final_risk < 0.3        -> ALLOW
-0.3 <= final_risk <= 0.6 -> APPROVE  (routes to Senior Staff/Approver)
-final_risk > 0.6         -> BLOCK
+User (Customer / Staff / Approver)
+   [Bank, Role, Tier loaded from DB]
+                |
+                v
+      FastAPI Gateway (Interception)
+                |
+                v
+       LangGraph Agent (Gemini) [PLANNED]
+   (Proposes Tool Call + Generates Response)
+                |
+                v
+      TrustLayer Interception Boundary
+                |
+        +-------+-------------------------------+
+        |                                       |
+        v                                       v
+[Engine 5A: Grounding]                 [Engine 5B: Security Firewall]
+- Extract claims (Gemini) [IMPL]       - Load policy config (OPA) [PLANNED]
+- Embed claims (BGE-M3) [IMPL]         - Permissions & Limits (Role/Tier) [PLANNED]
+- Vector search (Qdrant [PLANNED] /    - Dependency graph (Neo4j [PLANNED])
+  pgvector [IMPL], Bank/Role/Tier)     - Sequence anomaly check [IMPL]
+- Sentence-level NLI (DeBERTa) [IMPL]  - Policy risk score (0 to 1) [IMPL]
+- Grounding score (0 to 1) [IMPL]
+        |                                       |
+        +-------+-------------------------------+
+                |
+                v
+[Section 6: Decision & Risk Engine]
+Inputs: Grounding, Policy, Graph Status, Tool Sensitivity, Context Risk
+Gated by Non-Negotiable Safety Floors
+                |
+        +-------+-----------------------+
+        |                               |                               |
+        v                               v                               v
+      ALLOW                          APPROVE                          BLOCK
+ (Risk < 0.3)                   (0.3 <= Risk <= 0.6)              (Risk > 0.6)
+        |                               |                               |
+        v                               v                               v
+Docker Sandbox Execution          Senior Staff / Approver       Action NOT executed;
+(No network, read-only FS)        Queue (Approve -> Sandbox)    Template-driven safe
+        |                               |                       reply (reason + next step)
+        +-------------------------------+                               |
+                        |                                               |
+                        +-----------------------+-----------------------+
+                                                |
+                                                v
+                                        PostgreSQL Audit Log
+                               (Scores, Bank, Tier, Policy Version)
+                                                |
+                                                v
+                                  Dashboard & Bank Policy Console
 ```
 
-**Documented finding — floor-rule redundancy under equal weighting:** given the 0.5/0.5 weighting above, whenever `grounding_score < 0.4` (i.e. `grounding_risk > 0.6`), `final_risk = 0.5*grounding_risk + 0.5*policy_risk ≥ 0.5*0.6 = 0.3` regardless of `policy_risk`'s value — meaning `final_risk` can never fall below the 0.3 ALLOW threshold in that case, and the weighted formula alone already guarantees APPROVE-or-worse. The explicit hard-override floor rule in Step 1 is therefore currently **mathematically redundant** with the weighted formula under equal weighting — it never actively changes an outcome the weighted formula wouldn't already produce. It is kept in the implementation as explicit defense-in-depth and to remain correct if the 0.5/0.5 weights are ever tuned unequally (e.g. if `policy_risk`'s weight is later reduced, the floor rule would become load-bearing). This is worth stating explicitly in the paper's methodology section rather than presenting the floor rule as an independently-verified second safeguard in the current configuration.
+### 2.2 Memory Budget for 8 GB RAM Hardware
+Target Environment: Intel Core i5, 8 GB RAM, no dedicated GPU.  
+Running Postgres, Neo4j, Qdrant, OPA, BGE-M3 (1024-dim), DeBERTa-v3, and Docker Desktop concurrently on 8 GB RAM creates severe memory pressure.
 
-The 0.3 / 0.6 cutlines are initial values — tune against real score distributions once the Week 4 evaluation set has been run; document the final chosen values and rationale in the paper.
+**Architectural Budget & Resource Mitigations:**
+1. **Qdrant Embedded Mode:** Run Qdrant in-process via python bindings (`qdrant-client` embedded storage) behind a vector store interface, avoiding a separate daemon container/process.
+2. **Dependency Graph (NetworkX Default / Neo4j Adapter):** Build the graph engine behind an abstract interface with **NetworkX as the default** in-memory engine (zero daemon overhead). Neo4j is structured as an optional adapter; if activated, cap JVM heap to max 512 MB (`dbms.memory.heap.initial_size=256m`, `dbms.memory.heap.max_size=512m`).
+3. **Selective Process Launching:** In development and testing, run only the background services strictly required for the test target (e.g., test grounding without Neo4j running).
+4. **Local Model Offloading:** BGE-M3 and DeBERTa-v3 execute sequentially on CPU with PyTorch inference threads capped (`torch.set_num_threads(2)`).
 
-## 6. Failure / Fallback Behavior
+---
 
-- **Gemini API failure (timeout, rate limit, network/API-key error):** retried once (~6-8s timeout per attempt) across two model tiers (`gemini-flash-latest` → `gemini-flash-lite-latest`). On exhausted retries, falls back to a **deterministic heuristic sentence-splitter extractor** (splits on sentence boundaries, filters greetings/pleasantries) rather than immediately treating the claim as ungrounded — this keeps the pipeline functional in a demo even if Gemini is fully unavailable, at the cost of less precise claim boundaries.
-- **NLI failure (model/inference error) on a money-moving action:** treated as `grounding_score = 0` → forces minimum APPROVE via the floor logic. Never fail-open for financial actions.
-- **Policy engine failure (unexpected exception):** fail-closed — default BLOCK, `policy_risk = 1.0`.
-- **Read-only actions** (check balance, get transactions): may fail-open with a logged warning if grounding infra errors, since no financial harm is possible.
-- Every fallback trigger is logged distinctly in `audit_log` with `event = 'grounding_unavailable'` or `event = 'policy_engine_error'` — documented as a robustness property in the paper/defense.
-- Rate limiting is a real risk on the Gemini free tier under repeated demo/testing calls — add basic response caching per claim during development to avoid burning quota, and keep a local backup key or a cached "known good" demo run ready in case live API calls fail during the viva.
+## 3. Claim Grounding Engine (Engine 5A)
 
-## 7. Evaluation Plan
+1. **Claim Extraction `[IMPLEMENTED]`:** The agent produces reasoning referencing factual justifications. Gemini extracts atomic propositions in structured JSON. If the API fails after retries, a heuristic sentence-splitter acts as fallback.
+2. **Access-Aware Retrieval:**
+   - `[IMPLEMENTED]`: Filtered by requesting user's `role_scope` in PostgreSQL `pgvector`.
+   - `[PLANNED]`: Multi-tenant filtering keyed on `bank_id`, `role_scope`, and `tier_scope` in Qdrant (embedded mode).
+3. **Sentence-Level NLI Verification `[IMPLEMENTED]`:** Retrieved chunks are split into constituent sentences. DeBERTa-v3 evaluates candidate sentence pairs individually. If any sentence yields entailment probability $> 0.5$, the chunk is classified as `ENTAILED`.
+4. **Relevance-Gated Contradiction `[IMPLEMENTED]`:** Chunks with cosine similarity $< 0.65$ to the claim cannot trigger a `CONTRADICTION` classification, eliminating false-positive penalties from off-topic chunks.
+5. **Graduated Grounding Score Formula `[IMPLEMENTED]`:**
+   - $\text{GS}_{\text{base}} = \frac{1}{N} \sum_{i=1}^N \max(\text{entailment\_prob}_i)$
+   - $\text{Penalty} = \text{mean}(P(\text{contradiction}) \text{ for contradicted claims}) \times \left(\frac{N_{\text{contradicted}}}{N}\right)$
+   - $\text{grounding\_score} = \max(0.0, \text{GS}_{\text{base}} \times (1.0 - \text{Penalty}))$
+   - $\text{grounding\_risk} = 1.0 - \text{grounding\_score}$
 
-### 7.1 Test Buckets (hand-crafted / lightly synthetic, ~15–25 cases each)
-1. **Clean** — grounded claim, authorized action → expect ALLOW.
-2. **Ungrounded-only** — false/hallucinated claim, action authorized → expect BLOCK/APPROVE, never ALLOW.
-3. **Unauthorized-only** — true claim, action outside role/policy → expect BLOCK.
-4. **Compound failure (core thesis case)** — false/ungrounded claim AND fully authorized action → expect BLOCK/APPROVE. This is the case no paper in the literature survey catches; system performance here is the headline result. **A working example was manually validated in Week 3**: a customer, fully RBAC-authorized to call `transfer_funds`, includes a hallucinated claim about a fee waiver promotion; grounding correctly returns a low score (NLI contradiction against the real fee policy), and the decision engine correctly routes to APPROVE rather than ALLOW despite full RBAC authorization — the compound failure is caught end to end. Note that in the current test cases the false claim is injected via the user's message text (the agent is a rule-based intent matcher, not an LLM generating its own claims), so what is verified today is claim grounding on the request text. Decide before the Week 4 evaluation whether to also cover agent-generated claims, since the thesis is framed around the agent's own beliefs.
+---
 
-### 7.2 Metrics
-- Grounding: precision / recall / F1 vs. NLI ground-truth labels.
-- Decision gate accuracy vs. ground-truth allow/block/approve labels, reported **per bucket** (bucket 4 is the primary metric).
-- Latency per decision (relevant given local-model/limited-hardware constraints).
+## 4. Tool-Call Security Firewall (Engine 5B)
 
-### 7.3 Ablation Study (core evidence for the paper)
-Run the same test set through three configurations:
-- (a) RBAC-only (no grounding)
-- (b) Grounding-only (no RBAC)
-- (c) Full TrustLayer (both, jointly)
+1. **OPA Policy with Bank Config as Data `[PLANNED]`:**
+   - Fixed Rego rules validate general access invariants.
+   - Bank-specific policies (role permissions, per-tool limits, tier caps) are pushed as structured JSON data into OPA.
+   - Supersedes the hardcoded Python RBAC matrix (`[IMPLEMENTED]` in `policy/rbac.py`).
+2. **Hierarchical Overrides `[PLANNED]`:**
+   $$\text{Bank Defaults} \longrightarrow \text{Tier Rules (Standard/Gold/Platinum)} \longrightarrow \text{Role Permissions}$$
+3. **Workflow Dependency Graph `[PLANNED]` (NetworkX default / optional Neo4j adapter):**
+   - Built behind an abstract graph interface. **NetworkX is the default** in-memory engine (zero daemon overhead). Neo4j is an optional adapter if time and memory allow (JVM heap capped at ~512 MB).
+   - Validates that mandatory prerequisite steps occurred prior to high-stakes actions (e.g., `verify_identity` $\rightarrow$ `check_balance` $\rightarrow$ `transfer_funds`).
+   - If a prerequisite step is absent or executed out of order, graph risk is flagged.
+4. **Sequence Anomaly Check `[IMPLEMENTED]`:**
+   - Flags an immediate `transfer_funds` draining $\ge 85\%$ of the account balance within 5 minutes of a `check_balance` call without re-authentication (`policy_risk = 0.8`).
+5. **Output:** `policy_risk` scored from 0.0 (fully compliant) to 1.0 (hard violation).
 
-Expected result: (a) and (b) each fail bucket 4 independently; (c) catches it. This single comparison table is the paper's central empirical contribution.
+---
 
-## 8. Logging & Audit
+## 5. Decision and Risk Engine
 
-- Every request gets a `request_id` (UUIDv4) generated at the FastAPI gateway, propagated through `claims`, `grounding_results`, `policy_checks`, `decisions`, `agent_actions`, and `audit_log` — confirmed via direct Postgres queries joining these tables on `request_id`/`decision_id`/`action_id`.
-- Structured logs at each stage, correlated by `request_id` / `session_id`.
-- `audit_log` table persists every decision with full inputs (grounding_score, policy_risk, final_risk, decision, approver if applicable) for compliance-style traceability. **`decisions.final_risk` must be a fixed-precision type (`NUMERIC`), not `float8`/`double precision`** — a float type was found to produce precision artifacts (e.g. displaying `0.40000000000000002220446049250313080847263336181640625` instead of `0.4`) when queried directly, which is unacceptable for an auditable financial risk score; this is now migrated (Alembic migration `0002_numeric_precision`) for `final_risk`, `policy_risk_score` and `grounding_score`, and verified via direct psql queries returning clean values such as `0.4000`.
+### 5.1 Inputs to the Decision Engine
+The target engine combines five risk signals:
+1. `grounding_risk` ($1.0 - \text{grounding\_score}$) `[IMPLEMENTED]`
+2. `policy_risk` (Python RBAC limit checks `[IMPLEMENTED]`; OPA `[PLANNED]`)
+3. `graph_risk` (Dependency graph prerequisite violations) `[PLANNED]`
+4. `tool_sensitivity` (Static/configurable criticality of the tool, e.g. read-only vs money-moving) `[PLANNED]`
+5. `context_risk` (Session anomaly markers, e.g., IP change or rapid repeat requests) `[PLANNED]`
 
-## 9. Constraints Recap
+### 5.2 Decision Formula & Tuning Status
 
-- Zero budget (Gemini API free tier, Docker Desktop free tier for local Postgres dev), embeddings + NLI fully offline (cached locally under `backend/models_cache`), claim extraction requires internet + API key (Gemini API), i5/8GB/no-GPU hardware, single-instance (no scaling infra), 5-week solo build window ending 30 Oct 2026.
+#### Current / Two-Input Formula `[IMPLEMENTED]`:
+$$\text{final\_risk} = 0.5 \times \text{grounding\_risk} + 0.5 \times \text{policy\_risk}$$
+
+#### Target Five-Input Formula `[PLANNED]`:
+$$\text{final\_risk} = w_1 \cdot \text{grounding\_risk} + w_2 \cdot \text{policy\_risk} + w_3 \cdot \text{graph\_risk} + w_4 \cdot \text{tool\_sensitivity} + w_5 \cdot \text{context\_risk}$$
+> [!NOTE]
+> **Weights Status:** The five-input weights are currently undefined. **Weights set during threshold tuning (after step 4)** based on empirical validation distributions. Do not invent speculative weights.
+
+#### Decision Thresholds:
+- $\text{final\_risk} < 0.3 \longrightarrow$ **`ALLOW`**
+- $0.3 \le \text{final\_risk} \le 0.6 \longrightarrow$ **`APPROVE`** (routes to Approver queue)
+- $\text{final\_risk} > 0.6 \longrightarrow$ **`BLOCK`**
+
+### 5.3 Non-Negotiable Safety Floors (Inviolable Invariants)
+Safety floors cannot be overridden or edited from the policy console for any bank or tier:
+1. **Role Denial Hard Override:** If an action is forbidden for a role, it triggers an immediate **`BLOCK`** (`policy_risk = 1.0`), regardless of grounding score or context.
+2. **Ungrounded Money-Moving Action Floor:** If $\text{grounding\_score} < 0.4$ on any money-moving tool (`transfer_funds`, `block_card`, `dispute_charge`, `waive_fee`, `override_hold`), the outcome is floored at **`APPROVE`** (or `BLOCK`), **never `ALLOW` outright**.
+   - *Active Status Note:* Under the current two-input equal weighting ($0.5/0.5$), if $\text{grounding\_score} < 0.4$, $\text{grounding\_risk} > 0.6$, yielding $\text{final\_risk} \ge 0.5 \times 0.6 = 0.3$, which already reaches `APPROVE` on its own. The floor rule is currently mathematically subsumed under equal weighting and is not the sole deciding factor today. It serves as **defense-in-depth that becomes active once the five-input weights are unequal**.
+3. **Database-Sourced Authority:** Role and tier are loaded strictly from the authenticated database record, never extracted from user chat input or agent reasoning traces.
+
+---
+
+## 6. Execution Sandbox & Fail-Safe Paths
+
+### 6.1 Tool Execution
+- **Interim `[IMPLEMENTED]`:** Executes directly against an in-process PostgreSQL mock ledger.
+- **Final `[PLANNED]`:** Runs inside an ephemeral Docker sandbox container with `--net=none`, a read-only root filesystem, and restricted volume mounts communicating solely with the mock bank ledger service.
+
+### 6.2 Fail-Safe Behaviors `[IMPLEMENTED]`
+- **Grounding Infrastructure Failure (Gemini/NLI timeout or crash):**
+  - Money-moving actions: Floor enforced at `APPROVE`, logged as `event = 'grounding_unavailable'`. Never fail-open.
+  - Read-only actions (`check_balance`, `get_transactions`): Fail-open with warning logged.
+- **Policy Engine Failure (OPA / Python exception):**
+  - Fail-closed: Forces immediate `BLOCK` (`policy_risk = 1.0`), logged as `event = 'policy_engine_error'`.
+
+---
+
+## 7. Evaluation Plan & Empirical Results
+
+### 7.1 Prior Benchmark Results (97 Cases across 10 Buckets) `[IMPLEMENTED]`
+Evaluated against `eval/cases.json` + `eval/hard_cases.json` across 3 configurations:
+- **`rbac_only`:** 53/97 accuracy (**54.6%**) — completely blind to false reasoning claims.
+- **`grounding_only`:** 82/97 accuracy (**84.5%**) — completely blind to role privilege escalation.
+- **`full` (TrustLayer):** 97/97 accuracy (**100.0%**) with **0.0% False Positive Rate (FPR)** on benign cases.
+
+### 7.2 Extended Evaluation Plan for Springer Journal Paper `[PLANNED]`
+To provide independent academic rigor beyond self-authored test suites:
+1. **Real LangGraph Agent Re-run:** Re-run the existing 5 core buckets using genuine reasoning traces from the LangGraph Gemini agent, ensuring claims are authentically agent-generated.
+2. **Tier-Entitlement Bucket:** Introduce a dedicated test bucket evaluating tier privilege escalation (e.g., Standard users claiming Platinum transfer limits or fee waivers).
+3. **Ablation Studies:** Repeat the 3-way ablation (`rbac_only`, `grounding_only`, `full`) across the updated 5-input architecture.
+4. **External Baselines:**
+   - **AEGIS-Style Baseline:** Pure tool-call policy firewall without grounding verification.
+   - **HaluCheck-Style Baseline:** Pure claim grounding verification without role/tier access control.
+5. **External Benchmark Datasets:**
+   - **Agent Security Bench:** For evaluating tool-call safety and vulnerability detection.
+   - **Public Hallucination Benchmark:** For domain-independent claim grounding accuracy.
+6. **Multi-Bank $\times$ Tier Grid:** Execute identical requests across a matrix of 2 Banks $\times$ 3 Tiers (Standard, Gold, Platinum) to demonstrate distinct, policy-governed outcomes.

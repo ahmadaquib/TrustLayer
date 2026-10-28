@@ -19,6 +19,7 @@ from trustlayer.main import app
 
 async def test_all_outcomes():
     alice_id = uuid.UUID("11111111-1111-1111-1111-111111111111")
+    eleanor_id = uuid.UUID("66666666-6666-6666-6666-666666666666")
     
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         print("=" * 80)
@@ -187,7 +188,12 @@ async def test_all_outcomes():
         print("\n" + "-" * 80)
         print("[TEST 6] Testing GET /approvals/pending endpoint")
         print("-" * 80)
-        res_pending = await client.get("/approvals/pending")
+        # Verify non-approver role receives 403 Forbidden
+        res_forbidden = await client.get("/approvals/pending", headers={"X-User-Id": str(alice_id)})
+        assert res_forbidden.status_code == 403
+
+        # Verify approver role receives 200 OK
+        res_pending = await client.get("/approvals/pending", headers={"X-User-Id": str(eleanor_id)})
         print(f"Status Code: {res_pending.status_code}")
         pending_list = res_pending.json()
         print(f"Pending Approvals Count: {len(pending_list)}")

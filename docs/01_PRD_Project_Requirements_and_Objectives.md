@@ -1,94 +1,126 @@
 # Doc 01 — Project Requirements & Objectives
 
-**Project:** TrustLayer — Access-Aware RAG Gateway with Claim-Level Grounding Verification
-**Case Study:** Role-Based Banking Support Assistant
-**Paper Title:** *Design and Evaluation of an Access-Aware RAG Gateway with Claim-Level Grounding Verification: A Role-Based Banking Support Assistant Case Study*
-**Owner:** Aquib — BE Computer Science / Data Science (AI & ML), VCET, Mumbai University
-**Target Completion:** 30 October 2026
+**Project:** TrustLayer — Access-Aware RAG Gateway with Claim-Level Grounding Verification  
+**Case Study:** Role-Based Banking Support Assistant (Multi-Bank, Tiered)  
+**Paper Title:** *Design and Evaluation of an Access-Aware RAG Gateway with Claim-Level Grounding Verification: A Role-Based Banking Support Assistant Case Study*  
+**Owner:** Aquib — BE Computer Science / Data Science (AI & ML), VCET, Mumbai University  
+**Target Completion:** End of Semester 8 (Working System, Final Viva, and Springer Journal Paper)  
+**Baseline / Interim Checkpoint:** 30 October 2026  
+**Status Marking:** Components are explicitly tagged as `[IMPLEMENTED]` (built and verified in the interim prototype) or `[PLANNED]` (target architecture per Panel Review & Final Architecture v1.0).
 
 ---
 
 ## 1. Problem Statement
 
-Agentic AI systems are increasingly deployed in production to take real actions on a company's behalf — not just answer questions. Two failure modes exist today, and the research/industry landscape treats them as separate problems:
+Agentic AI systems are increasingly deployed in production to take real actions on an institution's behalf — not just answer questions. Two primary failure modes exist today, which the research and industry landscape treats as disconnected problems:
 
-- **Type-A failure (hallucination):** the agent's underlying belief/claim is factually wrong.
-- **Type-B failure (unauthorized action):** the agent takes an action it isn't permitted to take.
+- **Type-A failure (hallucination):** The agent's underlying belief or claim is factually false or ungrounded.
+- **Type-B failure (unauthorized action / privilege escalation):** The agent executes an action it is not permitted to take under governance policies.
 
-Existing research (see literature survey, 21 papers) splits cleanly into two disconnected groups: tool-call security/firewall systems that verify *what an agent is allowed to do*, and hallucination-detection systems that verify *what an agent believes is true*. **No system evaluates both together.**
+Existing research (surveying 21 papers across agent security and RAG verification) splits cleanly into two isolated camps: tool-call security/firewall systems that verify *what an agent is allowed to do* (e.g., AEGIS-style policy firewalls), and hallucination-detection systems that verify *what an agent believes is true* (e.g., HaluCheck-style RAG verifiers). **No system evaluates both failure modes together in a unified decision framework.**
 
-The compound failure this leaves open: an agent can pass every authorization check (the action is fully permitted) while still acting on a false or ungrounded claim — e.g., an agent that is authorized to process a refund does so because it hallucinated that a return policy applies, when it doesn't. Companies deploying agentic AI cannot absorb the financial and trust cost of this failure mode, and no current tool catches it before execution.
+### The Compound Failure Thesis
+The critical vulnerability left exposed is the **compound failure**:
+1. An action can be **fully authorized** under role policies yet rest upon a **hallucinated or false claim** (e.g., a customer service agent is authorized to execute fee waivers or fund transfers, but processes a ₹2,50,000 transfer because it hallucinates that the user has a Platinum ₹5,00,000 limit, when the user is actually on Standard tier with a ₹1,00,000 limit).
+2. A claim can be **factually true** while the proposed action itself is **strictly illegal** for that role or tier (e.g., a bank's policy genuinely permits 90-day dispute windows, but a customer directly attempts an administrative tool call reserved for staff).
+
+### Tier-Entitlement Hallucination
+In multi-bank and tiered enterprise environments, TrustLayer introduces and addresses a specific hallucination class: the **tier-entitlement claim**. Here, a user or the agent assumes privileges, fee waivers, daily transaction limits, or expedited dispute windows that belong to a higher tier (e.g., Platinum) rather than the customer's authenticated tier (e.g., Standard). TrustLayer grounds claims against the specific bank and tier documents to eliminate entitlement hallucination before actions execute.
+
+---
 
 ## 2. Objective
 
-Build a middleware — **TrustLayer** — that sits between an AI agent's reasoning step and tool execution, and jointly evaluates:
-1. Whether the claim that justifies the proposed action is **factually grounded** in evidence (claim-level NLI verification against a knowledge base).
-2. Whether the action itself is **authorized** under role-based policy.
+Build an access-aware agent firewall middleware — **TrustLayer** — positioned between an AI agent's reasoning step and tool execution, that jointly evaluates:
+1. **Factual Grounding:** Whether the claims justifying the proposed action are factually grounded in evidence via claim-level NLI verification against an access-scoped knowledge base.
+2. **Policy Authorization:** Whether the proposed action satisfies role, tier, daily limit, and workflow dependency constraints.
 
-...and gates execution (allow / block / require human approval) based on both, in real time, before the action executes.
+TrustLayer resolves both checks into a unified real-time governance decision: **ALLOW**, **APPROVE** (route to human approver), or **BLOCK** before the tool can execute.
 
-## 3. Case Study Domain: Banking Support Assistant
+---
 
-Banking was chosen because it has natural role tiers, high-stakes financial actions, and a real regulatory/policy analogue (manager approval workflows) that maps cleanly onto the human-approval decision branch.
+## 3. Case Study Domain: Multi-Bank & Tiered Banking Support Assistant
 
-### 3.1 Core Agentic Capabilities (must-have)
-The assistant must reason and take real actions via tool calls — this is non-negotiable; without it, the project is "just RAG." Required tools:
-- Check balance
-- Get transactions
-- Transfer funds
-- Block card
-- Dispute charge
+Banking provides high-stakes financial operations, formal regulatory guidelines, hierarchical customer tiers, and established manager-approval workflows.
 
-### 3.2 Roles (three-tier)
-| Role | Description |
-|---|---|
-| Customer | End user; interacts via chat with multi-turn session memory |
-| Bank Staff / Admin | Elevated access; can view usage analytics (query/action types, resource usage) |
-| Senior Staff / Approver | Receives and resolves actions routed to human approval, per company-policy-style manager approval |
+### 3.1 Multi-Bank & Customer Tier Model `[PLANNED]`
+- **Scope for Demo and Evaluation:** 2 Banks (e.g., Bank A, Bank B) $\times$ 3 Customer Tiers (Standard, Gold, Platinum).
+- **Three Decision Axes:**
+  1. **Bank:** Governs which rulebook and uploaded policy documents apply (loaded from DB bank record).
+  2. **Role:** Governs which tools may be attempted at all (loaded from DB user record).
+  3. **Tier:** Governs transaction limits, daily caps, fees, and service entitlements (loaded from DB customer record).
+
+> [!IMPORTANT]
+> **Safety Floors (Non-Negotiable):**
+> - Bank, role, and tier **always** come from the database, never from user messages or agent reasoning.
+> - Safety floors are **NOT editable** by any bank or tier: role denial blocks unconditionally; ungrounded money-moving actions never auto-allow.
+
+### 3.2 Core Agentic Capabilities (Tool Execution)
+The agent performs real actions via tool calls:
+- `check_balance` — Inspect account balances.
+- `get_transactions` — Query statement history.
+- `transfer_funds` — Transfer money between accounts (subject to tier caps and sequence checks).
+- `block_card` — Freeze debit/credit cards immediately.
+- `dispute_charge` — Initiate transaction disputes.
+- Administrative tools: `waive_fee`, `increase_limit`, `override_hold` (restricted to staff/approver).
+
+### 3.3 Roles
+| Role | Description | Status |
+|---|---|---|
+| **Customer** | End user; interacts via chat with multi-turn session memory; bound to a specific tier (Standard / Gold / Platinum). | `[IMPLEMENTED]` (Roles), `[PLANNED]` (Tiers) |
+| **Bank Staff / Admin** | Elevated access; monitors analytics, manages bank-specific policies and KB documents. | `[IMPLEMENTED]` (Analytics), `[PLANNED]` (Policy Console) |
+| **Senior Staff / Approver** | Resolves actions routed to the human approval queue; manages policy configurations. | `[IMPLEMENTED]` (Approvals), `[PLANNED]` (Policy Admin) |
+
+---
 
 ## 4. Functional Requirements
 
-- **FR1:** System must retrieve knowledge base content filtered by the requesting user's role before generation (access-aware RAG).
-- **FR2:** System must extract atomic claims from the agent's generated response/reasoning.
-- **FR3:** System must verify each claim against retrieved evidence using NLI and compute a grounding score.
-- **FR4:** System must intercept every proposed tool call before execution.
-- **FR5:** System must check the proposed action against RBAC policy for the user's role.
-- **FR6:** System must run a rule-based sequence-anomaly check (e.g., check-balance immediately followed by transfer-all-funds without re-auth).
-- **FR7:** System must combine grounding risk + policy risk into a final decision: **allow / block / approve** (see Doc 02 for exact logic).
-- **FR8:** Actions routed to "approve" must reach a Senior Staff/Approver role for resolution.
-- **FR9:** System must log every decision with a shared request/session ID, correlated across structured logs and a persistent audit table.
-- **FR10:** Admin/staff must have a dashboard showing usage analytics.
-- **FR11:** Customer-facing chat must retain multi-turn session context.
+- **FR1 — Access-Aware Retrieval:** Knowledge base retrieval must be filtered by bank, role, and tier (`[IMPLEMENTED]` for role filtering; `[PLANNED]` for bank and tier filtering).
+- **FR2 — Claim Extraction:** Extract atomic factual claims from agent reasoning traces (`[IMPLEMENTED]` via Gemini API with heuristic sentence-splitter fallback).
+- **FR3 — Claim Grounding Verification:** Verify each claim against retrieved evidence chunks using NLI and compute a graduated grounding score (`[IMPLEMENTED]` via DeBERTa-v3 sentence-level NLI).
+- **FR4 — Tool Interception:** Intercept all proposed tool calls prior to execution (`[IMPLEMENTED]` via FastAPI gateway interception layer).
+- **FR5 — Policy & Limits Verification:** Verify action permissions, tier limits, and daily caps (`[IMPLEMENTED]` via Python RBAC matrix; `[PLANNED]` via OPA with bank configuration as data).
+- **FR6 — Workflow & Sequence Checks:** Validate workflow execution order and detect anomalies (`[IMPLEMENTED]` via 5-minute $\ge 85\%$ balance drain sequence rule; `[PLANNED]` via Neo4j tool-dependency graph with NetworkX fallback).
+- **FR7 — Multi-Input Risk Decision:** Fuse grounding and policy signals into a risk score gating execution into ALLOW, APPROVE, or BLOCK (`[IMPLEMENTED]` 2-input formula; `[PLANNED]` 5-input weighted risk engine with safety floors).
+- **FR8 — Human-in-the-Loop Approvals:** Route borderline or high-risk actions to an Approver queue with review, approve, and reject workflows (`[IMPLEMENTED]`).
+- **FR9 — Comprehensive Audit Logging:** Persist every decision with request ID, scores, tier, and policy version in Postgres (`[IMPLEMENTED]` base schema; `[PLANNED]` bank, tier, policy_version additions).
+- **FR10 — Dashboard & Policy Console:** Administrative UI for analytics, approvals, tiered rule editing, and KB document uploads (`[IMPLEMENTED]` backend endpoints for analytics/approvals; `[PLANNED]` frontend UI & policy console).
+- **FR11 — Isolated Tool Execution:** Execute allowed tools in an isolated environment (`[IMPLEMENTED]` in-process mock DB ledger; `[PLANNED]` Docker sandbox with read-only filesystem and no network).
+- **FR12 — Template-Driven Block Replies:** Blocked responses must supply the policy reason and next step derived deterministically from policy/KB data, preventing response hallucination (`[PLANNED]`; `[IMPLEMENTED]` interim fallback string).
+
+---
 
 ## 5. Non-Functional Requirements
 
-- **NFR1 — Zero budget:** every component must be free, open-source, or self-hosted. No paid cloud tiers (e.g. no Neo4j Aura, no Qdrant Cloud).
-- **NFR2 — Runtime dependencies:** embeddings (BGE-M3) and NLI verification (DeBERTa-v3) run fully locally/offline. Claim extraction uses the **Gemini API** (cloud call) as a deliberate trade-off for reliability and ease of implementation — this means the running system requires internet connectivity and a valid API key at runtime for that one step. This is a conscious deviation from the original "fully offline" goal, documented here rather than left implicit; a fallback/offline-capable claim-extraction path (e.g. local Ollama model) is noted as a possible future extension if the API dependency proves risky for the live demo.
-- **NFR3 — Hardware constraint:** must run on Intel i5-1035G1, 8GB RAM, integrated graphics — no local GPU inference or training.
-- **NFR4 — Single-instance scope:** no load balancer or horizontal scaling; this is a local demo system, not a production service.
-- **NFR5 — Logging:** comprehensive structured logging across the whole system (not just the audit decision log), correlated via a shared request/session ID.
-- **NFR6 — Research quality:** design decisions must be documented with rationale suitable for a published paper and for technical interview discussion.
+- **NFR1 — Zero Budget & Open-Source:** All foundational modules must be free, open-source, or self-hosted.
+- **NFR2 — Local Inference & Controlled APIs:** Embeddings (BGE-M3) and NLI (DeBERTa-v3) run locally/offline. Claim extraction uses Gemini API with deterministic heuristic fallback.
+- **NFR3 — Hardware & Memory Budget (8 GB RAM):** The system must operate on an Intel i5, 8 GB RAM, no GPU host. Postgres, Neo4j, Qdrant, OPA, BGE-M3, DeBERTa, and Docker Desktop together exceed 8 GB if unmanaged.
+  - *Mitigations:* Qdrant runs in embedded mode (no server process); Neo4j JVM heap capped at ~512 MB with NetworkX fallback; services started on demand during testing.
+- **NFR4 — Traceability & Fixed Precision:** All decision scores must use exact database numeric types (`NUMERIC(5,4)`), correlated across all tables by a shared `request_id`.
+- **NFR5 — Research Quality:** Artifacts and evaluations must satisfy rigorous academic standards for Springer journal submission.
 
-## 6. Out of Scope (explicit simplifications vs. original full design)
+---
 
-| Original idea | Simplified to | Reason |
-|---|---|---|
-| Qdrant vector DB | pgvector | Zero-budget, single local Postgres instance |
-| Neo4j + NetworkX tool-dependency graph | Rule-based sequence check | 5-week solo build; graph DB adds infra overhead without proportional research value |
-| Trained XGBoost risk fusion | Documented weighted rule (grounding + policy risk) | No labeled training data pipeline feasible in timeframe; noted as future extension |
-| Docker sandbox for tool execution | Mocked bank ledger in local DB | Nothing genuinely risky to contain since there's no real bank integration |
-| Standalone injection-detection module | Folded into RBAC/policy check | Reduces module count without losing the defense |
-| MCP (Model Context Protocol) | Direct FastAPI interception | Industry guide flagged MCP as optional ("if required"); not required for this scope |
+## 6. Architecture Evolution: Interim Simplifications vs. Final Target Architecture
+
+The project roadmap progressed through an interim prototype to validate core concepts, evolving into the full panel-directed architecture.
+
+| Subsystem | Interim Prototype `[IMPLEMENTED]` | Final Target Architecture `[PLANNED]` | Rationale / Panel Direction |
+|---|---|---|---|
+| **Agent Core** | Custom rule-based intent matcher (`agent/loop.py`) | LangGraph with Gemini | Makes agent-generated claims genuine; enables true multi-turn autonomous reasoning. |
+| **Vector Database** | PostgreSQL + pgvector | Qdrant (embedded mode behind vector-store interface) | Production-grade vector search with embedded engine footprint to respect the 8 GB RAM budget. |
+| **Workflow Engine** | Rule-based sequence rule (balance check $\rightarrow$ drain $\ge 85\%$) | Neo4j dependency graph (NetworkX fallback) | Explicit state-machine validation of prerequisites (identity verified, balance checked, transfer permitted); capped at ~512 MB heap. |
+| **Policy Engine** | Hardcoded Python RBAC matrix (`policy/rbac.py`) | Open Policy Agent (OPA) with config as data | Decouples policy logic from code: fixed Rego policy rules evaluate bank-specific JSON data pushed per bank/tier. |
+| **Risk Engine** | 2-input weighted formula ($0.5 \times \text{grounding} + 0.5 \times \text{policy}$) | 5-input weighted risk engine + safety floors | Incorporates grounding, policy, graph status, tool sensitivity, and context risk. (No XGBoost due to lack of training data). |
+| **Execution Sandbox** | In-process mock DB ledger | Docker sandbox (no network, read-only FS, mock ledger) | Provides secure containment for tool execution against simulated banking backend. |
+| **Policy Management** | Hardcoded configurations | Bank Policy Console (layered overrides: bank $\rightarrow$ tier $\rightarrow$ role) | Allows administrators to update limits, rules, and upload role/tier-tagged KB documents with versioning. |
+| **OpenClaw** | Not included | Optional generality demo | Out of core scope; treated as optional post-core exploration. |
+
+---
 
 ## 7. Success Criteria
 
-- End-to-end demo: customer submits a request → agent reasons → TrustLayer intercepts → grounding + policy checks run → decision (allow/block/approve) is enforced → audited.
-- Evaluation shows TrustLayer catches the **compound failure case** (grounded-false-claim + authorized-action) that RBAC-only and grounding-only baselines each miss (see Doc 02 §6 for evaluation design).
-- All 6 planning documents complete and internally consistent with the final banking/agentic scope.
-- System is demo-ready and defensible in a viva/interview by 30 October 2026.
-
-## 8. Stakeholders
-
-- **Aquib** — sole designer/implementer (avoid describing the project as "solo" in official documentation, though it practically is)
-- **College project guide** — approved the project
-- **Independent industry expert** — acting as an additional technical guide
+1. **End-to-End Multi-Bank Demo:** Customer from Bank A / Standard tier submits an escalated or hallucinated request $\rightarrow$ LangGraph reasons $\rightarrow$ TrustLayer intercepts $\rightarrow$ parallel Grounding (Qdrant + DeBERTa) and Firewall (OPA + Neo4j) run $\rightarrow$ 5-input risk engine enforces BLOCK/APPROVE/ALLOW $\rightarrow$ sandbox execution or template-driven safe response.
+2. **Detection of Compound & Tier Failures:** Proven mitigation of authorized actions resting on false claims, role violations, and tier-entitlement claims.
+3. **Rigorous Academic Evaluation:** Re-running the 97-case benchmark with genuine agent reasoning, adding tier-entitlement buckets, testing against baselines (AEGIS, HaluCheck), evaluating external benchmarks (Agent Security Bench, public hallucination dataset), and testing a 2-bank $\times$ 3-tier matrix.
+4. **Deliverables:** Working software system, final viva examination, and manuscript submission to a Springer journal by the end of Semester 8.
