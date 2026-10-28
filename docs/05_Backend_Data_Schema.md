@@ -1,175 +1,241 @@
 # Doc 05 — Backend / Data Schema
 
-**Project:** TrustLayer — Banking Support Assistant Case Study
-**Database:** PostgreSQL + pgvector extension
+**Project:** TrustLayer — Banking Support Assistant Case Study (Multi-Bank, Tiered)  
+**Database:** PostgreSQL + pgvector extension  
+**Status Tagging:** Every table and column is explicitly marked as `[IMPLEMENTED]` (currently in database and active in code) or `[PLANNED]` (target architecture per Panel Review & Final Architecture v1.0). All new columns are added as nullable (`NULL`) to preserve exact backwards compatibility with the operational build.
 
 ---
 
-## 1. Schema (DDL-style overview)
+## 1. Complete Database Schema (DDL-style overview)
 
 ```sql
--- Identity & roles
-users(
-  id UUID PRIMARY KEY,
-  name TEXT,
-  email TEXT UNIQUE,
-  role_id INT REFERENCES roles(id),
-  created_at TIMESTAMP
-)
+-- ============================================================================
+-- 1. Identity, Banks & Roles
+-- ============================================================================
 
+-- [PLANNED] Multi-bank tenant registry
+banks(
+  id UUID PRIMARY KEY,
+  name TEXT NOT NULL,
+  code TEXT UNIQUE NOT NULL,      -- e.g. 'BANK_A', 'BANK_B'
+  created_at TIMESTAMP NOT NULL DEFAULT NOW()
+);
+
+-- [IMPLEMENTED] System role definitions
 roles(
   id SERIAL PRIMARY KEY,
-  name TEXT  -- 'customer' | 'staff' | 'approver'
-)
+  name TEXT NOT NULL              -- 'customer' | 'staff' | 'approver'
+);
 
--- Banking domain (mock ledger)
+-- User accounts with bank affiliation and tier
+users(
+  id UUID PRIMARY KEY,
+  name TEXT NOT NULL,
+  email TEXT UNIQUE NOT NULL,
+  role_id INT NOT NULL REFERENCES roles(id),
+  created_at TIMESTAMP NOT NULL,
+  bank_id UUID NULL REFERENCES banks(id),  -- [PLANNED]
+  tier TEXT NULL                           -- [PLANNED] 'standard' | 'gold' | 'platinum'
+);
+
+-- ============================================================================
+-- 2. Banking Domain (Mock Ledger)
+-- ============================================================================
+
 accounts(
   id UUID PRIMARY KEY,
-  user_id UUID REFERENCES users(id),
-  balance NUMERIC,
-  account_type TEXT
-)
+  user_id UUID NOT NULL REFERENCES users(id),
+  balance NUMERIC NOT NULL,
+  account_type TEXT NOT NULL               -- 'checking' | 'savings'
+);
 
 transactions(
   id UUID PRIMARY KEY,
-  account_id UUID REFERENCES accounts(id),
-  amount NUMERIC,
-  type TEXT,        -- 'debit' | 'credit' | 'transfer' | 'dispute'
-  status TEXT,       -- 'pending' | 'completed' | 'blocked'
-  created_at TIMESTAMP
-)
+  account_id UUID NOT NULL REFERENCES accounts(id),
+  amount NUMERIC NOT NULL,
+  type TEXT NOT NULL,                      -- 'debit' | 'credit' | 'transfer' | 'dispute'
+  status TEXT NOT NULL,                    -- 'pending' | 'completed' | 'blocked'
+  created_at TIMESTAMP NOT NULL
+);
 
--- Knowledge base (access-aware RAG)
+-- ============================================================================
+-- 3. Knowledge Base (Access-Aware RAG)
+-- ============================================================================
+
 kb_documents(
   id UUID PRIMARY KEY,
-  title TEXT,
-  content TEXT,
-  source TEXT,         -- 'real' | 'synthetic'
-  role_scope TEXT[]     -- which roles can retrieve this doc
-)
+  title TEXT NOT NULL,
+  content TEXT NOT NULL,
+  source TEXT NOT NULL,                    -- 'real' | 'synthetic'
+  role_scope TEXT[] NOT NULL,              -- [IMPLEMENTED] e.g. ARRAY['customer', 'staff']
+  bank_id UUID NULL REFERENCES banks(id),  -- [PLANNED] Bank document ownership
+  tier_scope TEXT[] NULL                   -- [PLANNED] ARRAY['standard', 'gold', 'platinum']
+);
 
 kb_embeddings(
   id UUID PRIMARY KEY,
-  doc_id UUID REFERENCES kb_documents(id),
-  chunk_text TEXT,
-  embedding VECTOR(1024),  -- BGE-M3 dimension — confirmed 1024 at implementation time
-  chunk_index INT
-)
+  doc_id UUID NOT NULL REFERENCES kb_documents(id),
+  chunk_text TEXT NOT NULL,
+  embedding VECTOR(1024) NOT NULL,         -- [IMPLEMENTED] BGE-M3 dimension (1024)
+  chunk_index INT NOT NULL
+);
 
--- Conversation
+-- ============================================================================
+-- 4. Governance & Policy Configuration (Rules as Data)
+-- ============================================================================
+
+-- [PLANNED] Versioned policy storage for OPA data injection
+policies(
+  id UUID PRIMARY KEY,
+  bank_id UUID NOT NULL REFERENCES banks(id),
+  policy_version INT NOT NULL,
+  rules_data JSONB NOT NULL,               -- Layered overrides: bank defaults -> tier -> role
+  created_by UUID NOT NULL REFERENCES users(id), -- Only approver/admin can edit
+  created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+  is_active BOOLEAN NOT NULL DEFAULT TRUE
+);
+
+-- [PLANNED] State-machine workflow dependency graph edges
+workflow_edges(
+  id UUID PRIMARY KEY,
+  bank_id UUID NULL REFERENCES banks(id),
+  from_action TEXT NOT NULL,               -- e.g. 'check_balance'
+  to_action TEXT NOT NULL,                 -- e.g. 'transfer_funds'
+  required_state TEXT NOT NULL,            -- e.g. 'identity_verified'
+  is_active BOOLEAN NOT NULL DEFAULT TRUE
+);
+
+-- ============================================================================
+-- 5. Conversation History
+-- ============================================================================
+
 chat_sessions(
   id UUID PRIMARY KEY,
-  user_id UUID REFERENCES users(id),
-  started_at TIMESTAMP
-)
+  user_id UUID NOT NULL REFERENCES users(id),
+  started_at TIMESTAMP NOT NULL
+);
 
 chat_messages(
   id UUID PRIMARY KEY,
-  session_id UUID REFERENCES chat_sessions(id),
-  role TEXT,     -- 'user' | 'agent'
-  content TEXT,
-  created_at TIMESTAMP
-)
+  session_id UUID NOT NULL REFERENCES chat_sessions(id),
+  role TEXT NOT NULL,                      -- 'user' | 'agent'
+  content TEXT NOT NULL,
+  created_at TIMESTAMP NOT NULL
+);
 
--- Agent actions & TrustLayer pipeline
+-- ============================================================================
+-- 6. Intercepted Actions, Claims & Verification
+-- ============================================================================
+
 agent_actions(
   id UUID PRIMARY KEY,
-  session_id UUID REFERENCES chat_sessions(id),
-  tool_name TEXT,
-  params_json JSONB,
-  proposed_at TIMESTAMP
-)
+  session_id UUID NOT NULL REFERENCES chat_sessions(id),
+  tool_name TEXT NOT NULL,
+  params_json JSONB NOT NULL,
+  proposed_at TIMESTAMP NOT NULL
+);
 
 claims(
   id UUID PRIMARY KEY,
-  action_id UUID REFERENCES agent_actions(id),
-  claim_text TEXT,
-  extracted_at TIMESTAMP
-)
+  action_id UUID NOT NULL REFERENCES agent_actions(id),
+  claim_text TEXT NOT NULL,
+  extracted_at TIMESTAMP NOT NULL
+);
 
 grounding_results(
   id UUID PRIMARY KEY,
-  claim_id UUID REFERENCES claims(id),
-  retrieved_doc_ids UUID[],
-  nli_label TEXT,          -- 'entailment' | 'neutral' | 'contradiction'
-  grounding_score NUMERIC(5,4)
-)
+  claim_id UUID NOT NULL REFERENCES claims(id),
+  retrieved_doc_ids UUID[] NOT NULL,
+  nli_label TEXT NOT NULL,                 -- 'entailment' | 'neutral' | 'contradiction'
+  grounding_score NUMERIC(5,4) NOT NULL
+);
 
 policy_checks(
   id UUID PRIMARY KEY,
-  action_id UUID REFERENCES agent_actions(id),
-  rbac_result TEXT,          -- 'allowed' | 'denied'
-  sequence_anomaly_flag BOOLEAN,
-  policy_risk_score NUMERIC(5,4)
-)
+  action_id UUID NOT NULL REFERENCES agent_actions(id),
+  rbac_result TEXT NOT NULL,               -- 'allowed' | 'denied'
+  sequence_anomaly_flag BOOLEAN NOT NULL,
+  policy_risk_score NUMERIC(5,4) NOT NULL
+);
+
+-- ============================================================================
+-- 7. Decisions & Auditing
+-- ============================================================================
 
 decisions(
   id UUID PRIMARY KEY,
-  action_id UUID REFERENCES agent_actions(id),
-  grounding_score NUMERIC(5,4),
-  policy_risk_score NUMERIC(5,4),
-  final_risk NUMERIC(5,4),      -- fixed-precision, migrated from float in 0002_numeric_precision — see note below
-  decision decision_type,       -- Postgres ENUM: 'allow' | 'block' | 'approve' (lowercase, strictly enforced at the DB level)
-  resolution_status TEXT NULL,  -- 'approved' | 'rejected' (NULL when pending; added in 0003_approval_hardening)
-  approver_id UUID REFERENCES users(id) NULL,
-  resolved_at TIMESTAMP NULL
-)
+  action_id UUID NOT NULL REFERENCES agent_actions(id),
+  grounding_score NUMERIC(5,4) NOT NULL,
+  policy_risk_score NUMERIC(5,4) NOT NULL,
+  final_risk NUMERIC(5,4) NOT NULL,        -- Fixed-precision NUMERIC(5,4)
+  decision decision_type NOT NULL,         -- Postgres ENUM: 'allow' | 'block' | 'approve'
+  resolution_status TEXT NULL,             -- 'approved' | 'rejected' (NULL when pending)
+  approver_id UUID NULL REFERENCES users(id),
+  resolved_at TIMESTAMP NULL,
+  -- Extended Five-Input and Multi-Bank Metadata:
+  graph_risk NUMERIC(5,4) NULL,            -- [PLANNED] Dependency graph score
+  tool_sensitivity_score NUMERIC(5,4) NULL,-- [PLANNED] Target tool risk weight
+  context_risk_score NUMERIC(5,4) NULL,    -- [PLANNED] Context anomaly score
+  bank_id UUID NULL REFERENCES banks(id),  -- [PLANNED]
+  tier TEXT NULL,                          -- [PLANNED] 'standard' | 'gold' | 'platinum'
+  policy_version INT NULL                  -- [PLANNED] Immutable policy version evaluated
+);
 
 audit_log(
   id UUID PRIMARY KEY,
-  request_id UUID,
-  session_id UUID REFERENCES chat_sessions(id),
-  action_id UUID REFERENCES agent_actions(id) NULL,
-  decision_id UUID REFERENCES decisions(id) NULL,
-  event TEXT,                  -- human-readable log string (e.g. 'action_approved: actor=...')
-  event_type TEXT,             -- structured event tag ('decision_made', 'action_approved', 'action_rejected')
-  actor_id UUID REFERENCES users(id) NULL,
-  reason TEXT,                 -- explicit approval or rejection rationale
-  timestamp TIMESTAMP
-)
+  request_id UUID NOT NULL,
+  session_id UUID NOT NULL REFERENCES chat_sessions(id),
+  action_id UUID NULL REFERENCES agent_actions(id),
+  decision_id UUID NULL REFERENCES decisions(id),
+  event TEXT NOT NULL,                     -- Human-readable log string
+  event_type TEXT NOT NULL,                -- Structured tag ('decision_made', 'action_approved', etc.)
+  actor_id UUID NULL REFERENCES users(id),
+  reason TEXT NULL,                        -- Approver rationale or system failure trace
+  timestamp TIMESTAMP NOT NULL,
+  bank_id UUID NULL REFERENCES banks(id),  -- [PLANNED]
+  tier TEXT NULL,                          -- [PLANNED]
+  policy_version INT NULL                  -- [PLANNED]
+);
 ```
 
-## 2. Key Design Notes
+---
 
-- **`request_id` on `audit_log`** is the correlation key shared with structured application logs — every log line for a single request carries the same ID, satisfying the end-to-end traceability requirement. Confirmed working via direct joins across `audit_log` → `decisions` → `agent_actions`.
-- **`decisions.resolution_status` & Atomic Claims** — tracks explicit resolution state (`approved` / `rejected`). Claims are executed atomically with conditional UPDATE (`WHERE resolved_at IS NULL`) so concurrent approve calls never result in double tool execution.
-- **Structured `audit_log` columns (`event_type`, `actor_id`, `decision_id`, `reason`)** — enable structured SQL analytics without regex parsing, while retaining the human-readable `event` string.
-- **`role_scope` on `kb_documents`** is what makes retrieval access-aware — the retrieval query always filters by the requesting user's role before the vector search runs, not after. Confirmed working: a staff-only document is correctly invisible to customer-role retrieval (grounding_score 0.0 for a customer-role claim about a staff-only sequence-anomaly policy vs. 0.99+ for the same claim under staff role).
-- **`kb_embeddings.embedding VECTOR(1024)`** — confirmed matches BGE-M3's actual output dimension (1024) at implementation time.
-- **`decisions.decision`** is implemented as a strict Postgres ENUM type (`decision_type`), not a free-text column — verified to reject any value other than exactly `allow`, `block`, `approve` (lowercase) at the database level, including rejecting uppercase variants and other candidate values tested during implementation.
-- **`decisions.final_risk` must be `NUMERIC(5,4)`, not `float8`/`double precision`.** A float type was found in practice to return binary floating-point precision artifacts when queried directly (e.g. `0.40000000000000002220446049250313080847263336181640625` instead of `0.4`) — unacceptable for an auditable financial risk score. This is now fixed: Alembic migration `0002_numeric_precision` converted `final_risk`, `policy_risk_score` and `grounding_score` (in `decisions`, `policy_checks` and `grounding_results`) to `NUMERIC(5,4)`, verified via `\d decisions` and direct queries returning clean values such as `0.4000`.
-- **`decisions.approver_id` is nullable** — only populated when `decision = 'approve'` and a Senior Staff/Approver has resolved it.
-- **Mock ledger, not real banking integration** — `accounts`/`transactions` are entirely local/simulated; this is why no Docker sandbox is required for tool execution. (Docker is separately used as a local dev convenience to host Postgres+pgvector — see Doc 02 §1 — which is unrelated to this design decision.)
+## 2. Key Architectural Invariants & Design Notes
 
-## 3. Indexing Notes
+1. **Strict Backwards Compatibility:** All existing operational columns and enum types (`decision_type`) remain untouched. New attributes for multi-bank (`bank_id`), tiering (`tier`, `tier_scope`), policy versioning (`policy_version`), and 5-input signals are declared nullable (`NULL`), ensuring current tests and endpoints run without modification.
+2. **Layered Policy Overrides Model `[PLANNED]`:**
+   $$\text{Bank Baseline Rules} \longrightarrow \text{Tier Entitlements} \longrightarrow \text{Role Permissions}$$
+   Stored in `policies.rules_data` as versioned JSON. Edits are restricted strictly to `approver` or `admin` roles, generating an immutable new version row and an entry in `audit_log`.
+3. **Database-Sourced Authority:** Authenticated `bank_id`, `role`, and `tier` must always resolve from the database (`users` / `roles`), never from user chat text or agent reasoning traces.
+4. **Safety Floors Invariant:** Role denial forces `BLOCK`; ungrounded money-moving actions never auto-allow. These floors are hard-coded in the engine and cannot be modified by any row in `policies`.
+5. **Fixed Numeric Precision:** All scores (`final_risk`, `grounding_score`, `policy_risk_score`, `graph_risk`) use `NUMERIC(5,4)` to eliminate floating-point representation artifacts.
 
-- `kb_embeddings.embedding` — pgvector index (IVFFlat or HNSW, whichever pgvector version supports) for similarity search performance on limited hardware.
-- `audit_log.request_id` and `audit_log.session_id` — indexed for fast correlation lookups on the analytics dashboard.
-- `chat_messages.session_id` — indexed for fast conversation history loading.
+---
 
-## 4. Data Population Plan
+## 3. Data Population & Seeding Plan
 
-- **`kb_documents`/`kb_embeddings`:** no suitable real banking dataset was found by the Week 2 checkpoint, so the fallback plan was exercised — populated with 12 synthetic policy documents (overdraft fees, dispute deadlines, transfer limits, card blocking, international fees, an internal staff-only sequence-anomaly policy, etc.), clearly marked `source = 'synthetic'`, embedded via BGE-M3 into `kb_embeddings`.
-- **`users`/`accounts`/`transactions`:** seeded with synthetic users across the three roles (3 customers, 2 staff, 1 approver at last count), with accounts and a handful of transactions per account — confirmed populated and queryable directly via Postgres.
+- **`banks` & `tiers` `[PLANNED]`:** Seeded with 2 banks (`Bank A`, `Bank B`) and 3 tiers each (`standard`, `gold`, `platinum`).
+- **`users` / `accounts` / `transactions` `[IMPLEMENTED]`:** Seeded with synthetic users across the 3 roles (`customer`, `staff`, `approver`), checking/savings accounts, and transaction histories.
+- **`kb_documents` / `kb_embeddings`:**
+  - `[IMPLEMENTED]`: 12 synthetic policy documents tagged with `role_scope` embedded via BGE-M3 (1024-dim).
+  - `[PLANNED]`: Bank compliance documents tagged with both `bank_id` and `tier_scope` indexed into embedded Qdrant.
 
-## 5. API Endpoints — Approvals Flow
+---
 
-### 5.1 POST `/approvals/{id}/approve`
+## 4. API Endpoints — Approvals & Operational Flow
+
+### 4.1 POST `/approvals/{id}/approve` (current formula / two-input) `[IMPLEMENTED]`
 Approves a pending held action, executes the underlying banking tool call against the mock ledger, sets resolution timestamps and approver ID, and writes an audit log entry.
+- **Access:** Approver role only (`X-User-Id` header).
+- **Precondition:** Approval `{id}` must exist and not be previously resolved (`409 Conflict`).
 
-- **Access:** Approver role only, derived exclusively from the user's DB record via `X-User-Id` header. No role override via query param or JSON body is accepted. Other roles (customer, staff) receive `403 Forbidden`.
-- **Precondition:** Approval `{id}` must exist (`404 Not Found` if missing) and must not have been previously resolved (`409 Conflict` if already resolved).
-
-**Request Headers & Parameters:**
+**Request:**
 ```http
 POST /approvals/5f420ccd-3e6c-42ac-b041-67073d5ef404/approve HTTP/1.1
 Host: localhost:8000
 Content-Type: application/json
 X-User-Id: 66666666-6666-6666-6666-666666666666
-```
 
-**Request Body (JSON, all fields optional):**
-```json
 {
   "reason": "Manual review passed: customer confirmed transfer intention over phone"
 }
@@ -200,38 +266,19 @@ X-User-Id: 66666666-6666-6666-6666-666666666666
 }
 ```
 
-**Conflict Response (409 Conflict — Double-resolve prevention):**
-```json
-{
-  "detail": "Approval 5f420ccd-3e6c-42ac-b041-67073d5ef404 has already been resolved at 2026-10-07T12:05:00.123456."
-}
-```
-
-**Forbidden Response (403 Forbidden — Non-approver role):**
-```json
-{
-  "detail": "Forbidden: Approver role required."
-}
-```
-
 ---
 
-### 5.2 POST `/approvals/{id}/reject`
-Rejects a pending held action. The tool action is **never executed** against the ledger. The decision is marked resolved, approver ID recorded, and an audit log entry written.
+### 4.2 POST `/approvals/{id}/reject` (current formula / two-input) `[IMPLEMENTED]`
+Rejects a pending held action. The tool action is never executed against the ledger.
+- **Access:** Approver role only.
 
-- **Access:** Approver role only, derived exclusively from the user's DB record via `X-User-Id` header. No role override via query param or JSON body is accepted. Other roles receive `403 Forbidden`.
-- **Precondition:** Approval `{id}` must exist (`404 Not Found`) and must not have been previously resolved (`409 Conflict`).
-
-**Request Headers & Parameters:**
+**Request:**
 ```http
 POST /approvals/5f420ccd-3e6c-42ac-b041-67073d5ef404/reject HTTP/1.1
 Host: localhost:8000
 Content-Type: application/json
 X-User-Id: 66666666-6666-6666-6666-666666666666
-```
 
-**Request Body (JSON, all fields optional):**
-```json
 {
   "reason": "Suspected account takeover: customer denied authorizing 90% balance drain"
 }
@@ -253,29 +300,11 @@ X-User-Id: 66666666-6666-6666-6666-666666666666
 }
 ```
 
-**Conflict Response (409 Conflict — Double-resolve prevention):**
-```json
-{
-  "detail": "Approval 5f420ccd-3e6c-42ac-b041-67073d5ef404 has already been resolved at 2026-10-07T12:06:15.654321."
-}
-```
-
 ---
 
-### 5.3 GET `/approvals/pending`
-Lists all unresolved actions queued for Senior Staff / Approver review, paginated and sorted newest first.
-
-- **Access:** Approver role only, derived exclusively from the user's DB record via `X-User-Id` header. No role override via query param or JSON body is accepted. Other roles receive `403 Forbidden`.
-- **Query Parameters:**
-  - `limit` (integer, default: 50, min: 1, max: 100): Maximum records to return.
-  - `offset` (integer, default: 0, min: 0): Records to skip for pagination.
-
-**Request:**
-```http
-GET /approvals/pending?limit=10&offset=0 HTTP/1.1
-Host: localhost:8000
-X-User-Id: 66666666-6666-6666-6666-666666666666
-```
+### 4.3 GET `/approvals/pending` (current formula / two-input) `[IMPLEMENTED]`
+Lists unresolved actions queued for Senior Staff / Approver review.
+- **Access:** Approver role only.
 
 **Response (200 OK):**
 ```json
@@ -302,20 +331,9 @@ X-User-Id: 66666666-6666-6666-6666-666666666666
 
 ---
 
-### 5.4 GET `/dashboard/summary`
-Returns aggregated decision statistics: counts by decision type, user role, and tool; average risk and grounding scores per decision. Uses SQL aggregation (not Python loops).
-
-- **Access:** Staff or Approver role only, derived exclusively from the user's DB record via `X-User-Id` header. Customers receive `403 Forbidden`.
-- **Query Parameters:**
-  - `from` (string, optional): ISO date start filter (inclusive).
-  - `to` (string, optional): ISO date end filter (inclusive).
-
-**Request:**
-```http
-GET /dashboard/summary?from=2026-10-01&to=2026-10-07 HTTP/1.1
-Host: localhost:8000
-X-User-Id: 44444444-4444-4444-4444-444444444444
-```
+### 4.4 GET `/dashboard/summary` (current formula / two-input) `[IMPLEMENTED]`
+Returns aggregated operational metrics for staff and approver review.
+- **Access:** Staff or Approver role only.
 
 **Response (200 OK):**
 ```json
@@ -346,35 +364,11 @@ X-User-Id: 44444444-4444-4444-4444-444444444444
 }
 ```
 
-**Forbidden Response (403 Forbidden — Customer role):**
-```json
-{
-  "detail": "Forbidden: Staff or Approver role required."
-}
-```
-
 ---
 
-### 5.5 GET `/audit`
-Returns paginated, filterable audit log rows with structured columns, joined decision scores, tool name, and originating user role. Sorted newest first.
-
-- **Access:** Staff or Approver role only, derived exclusively from the user's DB record via `X-User-Id` header. Customers receive `403 Forbidden`.
-- **Query Parameters:**
-  - `limit` (integer, default: 50, min: 1, max: 100): Maximum records to return.
-  - `offset` (integer, default: 0, min: 0): Records to skip for pagination.
-  - `decision` (string, optional): Filter by decision type (`allow`, `approve`, `block`).
-  - `role` (string, optional): Filter by originating user role (`customer`, `staff`, `approver`).
-  - `tool` (string, optional): Filter by tool name.
-  - `actor_id` (UUID string, optional): Filter by actor UUID (approver who resolved).
-  - `from` (string, optional): ISO date start filter.
-  - `to` (string, optional): ISO date end filter.
-
-**Request:**
-```http
-GET /audit?limit=10&offset=0&decision=approve&tool=transfer_funds HTTP/1.1
-Host: localhost:8000
-X-User-Id: 66666666-6666-6666-6666-666666666666
-```
+### 4.5 GET `/audit` (current formula / two-input) `[IMPLEMENTED]`
+Returns paginated, filterable audit log records with structured risk scores and event tags.
+- **Access:** Staff or Approver role only.
 
 **Response (200 OK):**
 ```json
@@ -405,9 +399,48 @@ X-User-Id: 66666666-6666-6666-6666-666666666666
 }
 ```
 
-**Forbidden Response (403 Forbidden — Customer role):**
+---
+
+### 4.6 Tier-Entitlement Block Evaluation `[PLANNED / Illustrative Example]`
+*(Illustrative example demonstrating target Figure 2 compound failure handling)*
+
+**Request Context:**
+- Customer: `11111111-1111-1111-1111-111111111111` (Bank A, Tier: `standard`, Role: `customer`)
+- Prompt: *"Transfer ₹2,50,000. I'm Platinum, limit ₹5 lakh."*
+- Proposed Action: `transfer_funds(amount=250000, recipient="Ravi")`
+- Claims: (1) *"Customer is Platinum"*, (2) *"Limit is ₹5,00,000"*
+
+**Decision Record & Response (Illustrative):**
 ```json
 {
-  "detail": "Forbidden: Staff or Approver role required."
+  "decision_id": "7c890123-4567-89ab-cdef-0123456789ab",
+  "request_id": "99998888-7777-6666-5555-444433332222",
+  "bank_id": "aaaa1111-bb22-cc33-dd44-ee5566778899",
+  "tier": "standard",
+  "policy_version": 7,
+  "action": {
+    "tool_name": "transfer_funds",
+    "params": { "amount": 250000, "recipient": "Ravi" }
+  },
+  "extracted_claims": [
+    "Customer has Platinum account tier",
+    "Customer has transfer limit of ₹5,00,000"
+  ],
+  "verification": {
+    "grounding_score": 0.1200,
+    "grounding_risk": 0.8800,
+    "policy_risk_score": 0.8000,
+    "graph_risk": 0.0000,
+    "tool_sensitivity_score": 0.7500,
+    "context_risk_score": 0.1000,
+    "safety_floors_triggered": false
+  },
+  "final_risk": 0.8400,
+  "decision": "block",
+  "tool_executed": false,
+  "agent_response": {
+    "safe_block_message": "Transfer limit for your Standard tier is ₹1,00,000, not ₹5,00,000. Next step: You may reduce the transfer amount to within ₹1,00,000 or apply for an account tier upgrade."
+  }
 }
 ```
+*(Note: `final_risk = 0.84` illustrated using current two-input weighting $0.5 \times 0.88 + 0.5 \times 0.80 = 0.84$. Target five-input weights will be calibrated during post-step-4 threshold tuning).*
