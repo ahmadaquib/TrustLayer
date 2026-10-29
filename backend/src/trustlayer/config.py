@@ -30,6 +30,8 @@ class Settings(BaseSettings):
 
     # ── Gemini API (claim extraction) ─────────────────────────────────────
     gemini_api_key: str = ""
+    gemini_enabled: bool = True
+    gemini_timeout_seconds: float = 6.0
 
     # ── Hugging Face API Token (model downloads: BGE-M3, DeBERTa-v3) ──────
     hf_token: str = ""

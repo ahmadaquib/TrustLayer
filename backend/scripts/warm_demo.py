@@ -10,6 +10,9 @@ Populates REAL audit log and decision rows in PostgreSQL before Friday review.
 import json
 import sys
 import time
+
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 import urllib.error
 import urllib.request
 from pathlib import Path
@@ -43,7 +46,7 @@ def post_chat(payload: dict) -> dict:
         headers={"Content-Type": "application/json"},
         method="POST",
     )
-    with urllib.request.urlopen(req, timeout=30) as resp:
+    with urllib.request.urlopen(req, timeout=60) as resp:
         return json.loads(resp.read().decode("utf-8"))
 
 
@@ -61,7 +64,7 @@ def run_warm_demo() -> int:
         print("   npm start")
         print("   or: cd backend && uv run uvicorn trustlayer.main:app --port 8000")
         return 1
-    print("      ✓ API online and responsive.")
+    print("      [OK] API online and responsive.")
 
     # 2. Load presets
     print(f"\n[2/3] Loading demo presets from {PRESETS_FILE}...")
@@ -76,7 +79,7 @@ def run_warm_demo() -> int:
         print(f"[ERROR] Failed to parse presets: {exc}")
         return 1
 
-    print(f"      ✓ Loaded {len(presets)} demo scenarios.")
+    print(f"      [OK] Loaded {len(presets)} demo scenarios.")
 
     # 3. Execute presets sequentially
     print(f"\n[3/3] Executing scenarios through /chat gateway...\n")

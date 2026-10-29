@@ -1,0 +1,127 @@
+{
+  "implemented": [
+    {
+      "id": "fastapi_interception",
+      "title": "FastAPI Tool Interception",
+      "badge": "IMPLEMENTED",
+      "note": "FastAPI interception of every proposed tool call"
+    },
+    {
+      "id": "gemini_claim_extraction",
+      "title": "Claim Extraction & Fallback",
+      "badge": "IMPLEMENTED",
+      "note": "Gemini claim extraction with heuristic fallback"
+    },
+    {
+      "id": "bge_m3_pgvector",
+      "title": "Vector Retrieval",
+      "badge": "IMPLEMENTED",
+      "note": "BGE-M3 embeddings with pgvector retrieval"
+    },
+    {
+      "id": "deberta_nli",
+      "title": "Sentence-Level NLI",
+      "badge": "IMPLEMENTED",
+      "note": "DeBERTa sentence-level NLI with graduated grounding score"
+    },
+    {
+      "id": "python_rbac",
+      "title": "Role Access Matrix",
+      "badge": "IMPLEMENTED",
+      "note": "Python RBAC role matrix"
+    },
+    {
+      "id": "sequence_check",
+      "title": "Sequence Anomaly Check",
+      "badge": "IMPLEMENTED",
+      "note": "sequence check (balance then near-total transfer within 5 minutes)"
+    },
+    {
+      "id": "risk_fusion_engine",
+      "title": "Two-Input Risk Fusion",
+      "badge": "IMPLEMENTED",
+      "note": "two-input risk engine (0.5 grounding + 0.5 policy) with ALLOW/APPROVE/BLOCK"
+    },
+    {
+      "id": "fail_closed_handling",
+      "title": "Fail-Closed Safety",
+      "badge": "IMPLEMENTED",
+      "note": "fail-closed handling for money-moving tools when verification or policy errors"
+    },
+    {
+      "id": "approval_queue",
+      "title": "Human-in-the-Loop Approvals",
+      "badge": "IMPLEMENTED",
+      "note": "approval queue"
+    },
+    {
+      "id": "audit_log",
+      "title": "Comprehensive Audit Trail",
+      "badge": "IMPLEMENTED",
+      "note": "audit log"
+    },
+    {
+      "id": "role_gated_dashboard",
+      "title": "Role-Gated Portal",
+      "badge": "IMPLEMENTED",
+      "note": "role-gated dashboard"
+    },
+    {
+      "id": "eval_with_ablation",
+      "title": "97-Case Evaluation Suite",
+      "badge": "IMPLEMENTED",
+      "note": "97-case evaluation with ablation"
+    }
+  ],
+  "planned": [
+    {
+      "id": "langgraph_gemini_agent",
+      "title": "LangGraph + Gemini Agent",
+      "badge": "PLANNED",
+      "note": "LangGraph + Gemini agent (genuinely agent-generated claims)"
+    },
+    {
+      "id": "opa_configuration",
+      "title": "Open Policy Agent (OPA)",
+      "badge": "PLANNED",
+      "note": "OPA with bank configuration as data"
+    },
+    {
+      "id": "dependency_graph",
+      "title": "Entity Dependency Graph",
+      "badge": "PLANNED",
+      "note": "dependency graph (NetworkX first, Neo4j optional)"
+    },
+    {
+      "id": "five_input_risk_engine",
+      "title": "Five-Input Risk Engine",
+      "badge": "PLANNED",
+      "note": "five-input risk engine with fixed safety floors"
+    },
+    {
+      "id": "multibank_tier_config",
+      "title": "Multi-Bank & Tier Configuration",
+      "badge": "PLANNED",
+      "note": "multi-bank and tier configuration (Standard/Gold/Platinum) with policy console and KB upload"
+    },
+    {
+      "id": "qdrant_vector_store",
+      "title": "Embedded Qdrant Store",
+      "badge": "PLANNED",
+      "note": "Qdrant embedded vector store"
+    },
+    {
+      "id": "docker_sandbox",
+      "title": "Containerized Sandbox",
+      "badge": "PLANNED",
+      "note": "Docker execution sandbox"
+    },
+    {
+      "id": "external_benchmarks",
+      "title": "External Safety Benchmarks",
+      "badge": "PLANNED",
+      "note": "external evaluation (Agent Security Bench, public hallucination dataset, AEGIS-style and HaluCheck-style baselines)"
+    }
+  ]
+}
+

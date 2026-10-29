@@ -9,7 +9,7 @@
     "dev": "npm run build && cd backend && uv run uvicorn trustlayer.main:app --reload --port 8000",
     "build": "cd frontend && npm run build",
     "start": "cd backend && uv run uvicorn trustlayer.main:app --port 8000",
-    "test:backend": "cd backend && uv run pytest tests/test_safety_fixes.py -v",
+    "test:backend": "cd backend && uv run pytest -q",
     "test": "npm run test:backend && npm run build"
   },
   "keywords": [

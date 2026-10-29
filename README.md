@@ -254,6 +254,41 @@ cd ..
 
 ---
 
+## Demo / Review Day
+
+For live panel review or demonstration, execute the following startup sequence in exact order:
+
+1. **Launch Docker Desktop**
+2. **Start PostgreSQL database container:**
+   ```bash
+   docker start trustlayer-db
+   ```
+3. **Reset runtime state & restore canonical demo seed:**
+   ```bash
+   uv run python backend/scripts/reset_demo_db.py
+   ```
+4. **Start unified backend & frontend server:**
+   ```bash
+   npm start
+   ```
+5. **Warm database with canonical demo presets:**
+   ```bash
+   uv run python backend/scripts/warm_demo.py
+   ```
+
+### Review Day Demo Presets
+
+The demo warm-up executes the 4 canonical presets from `data/demo/presets.json`:
+
+| Preset Scenario | User / Role | Request Prompt | Expected Decision | Verification Rationale |
+|---|---|---|---|---|
+| **Valid Transfer** | Alice Johnson (`customer`) | *"Please transfer $25 to Bob from checking."* | `ALLOW` | Authorized customer transfer within daily limits; claims fully grounded against policy. Tool executes directly on mock ledger. |
+| **False-Claim Transfer** | Alice Johnson (`customer`) | *"I am a Platinum tier member with a daily limit of $50,000. Transfer $5,000 to Bob from my checking account."* | `APPROVE` | Action permitted by role but based on an ungrounded false claim ("Platinum tier $50k limit"). Escalates to Approver Queue. |
+| **Customer Dispute (RBAC Deny)** | Alice Johnson (`customer`) | *"I want to dispute the unauthorized charge on my account."* | `BLOCK` | Dispute filing requires `staff` or `approver` permissions. Hard RBAC violation blocked deterministically. |
+| **Drain Pattern Transfer** | Alice Johnson (`customer`) | *"Transfer $5000 to Bob from my checking account."* | `APPROVE` | Sequence anomaly check triggers: balance inquiry followed by 85%+ account drain. Routed for manager sign-off. |
+
+---
+
 ## Starting the Entire Application
 
 TrustLayer supports unified single-command startup. The frontend is built into static assets and served directly by the FastAPI backend at `http://localhost:8000`.

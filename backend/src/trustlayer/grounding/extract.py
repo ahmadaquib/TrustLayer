@@ -74,7 +74,7 @@ def _parse_claims_response(raw_text: str) -> list[str]:
 
 def extract_claims(
     text: str,
-    timeout_sec: float = 6.0,
+    timeout_sec: float | None = None,
     max_retries: int = 1,
 ) -> dict[str, Any]:
     """
@@ -83,6 +83,17 @@ def extract_claims(
     API key is loaded from settings.gemini_api_key (pydantic-settings reading from .env).
     Follows docs/02 §6 failure handling.
     """
+    if timeout_sec is None:
+        timeout_sec = settings.gemini_timeout_seconds
+
+    if not settings.gemini_enabled:
+        logger.info("GEMINI_ENABLED is false. Skipping API call and using fallback heuristic extractor.")
+        return {
+            "claims": extract_claims_from_text_heuristic(text),
+            "source": "fallback",
+            "error": "GEMINI_ENABLED is false",
+        }
+
     api_key = settings.gemini_api_key
 
     if not api_key:

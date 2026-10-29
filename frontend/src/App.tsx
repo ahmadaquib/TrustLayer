@@ -1,10 +1,13 @@
 import { useState, useEffect } from 'react';
 import './App.css';
 import { api } from './api/client';
-import { Header } from './components/Header';
+import { Header, type ActiveTab } from './components/Header';
 import { ChatPage } from './routes/customer/ChatPage';
 import { ApproverQueuePage } from './routes/approver/ApproverQueuePage';
 import { DashboardPage } from './routes/admin/DashboardPage';
+import { EvaluationPage } from './routes/project/EvaluationPage';
+import { KnowledgeBasePage } from './routes/project/KnowledgeBasePage';
+import { RoadmapPage } from './routes/project/RoadmapPage';
 import type { UserProfile } from './types';
 
 const DEFAULT_USERS: UserProfile[] = [
@@ -41,7 +44,7 @@ const DEFAULT_USERS: UserProfile[] = [
 ];
 
 function App() {
-  const [activeTab, setActiveTab] = useState<'chat' | 'approvals' | 'analytics'>('chat');
+  const [activeTab, setActiveTab] = useState<ActiveTab>('chat');
   const [availableUsers, setAvailableUsers] = useState<UserProfile[]>(DEFAULT_USERS);
   const [currentUser, setCurrentUser] = useState<UserProfile>(DEFAULT_USERS[0]);
   const [backendOnline, setBackendOnline] = useState<boolean | null>(null);
@@ -110,6 +113,8 @@ function App() {
     }
   };
 
+  const isPrivileged = currentUser.role === 'staff' || currentUser.role === 'approver';
+
   return (
     <div className="tl-app-shell">
       <Header
@@ -146,9 +151,12 @@ function App() {
         {activeTab === 'approvals' && currentUser.role === 'approver' && (
           <ApproverQueuePage currentUser={currentUser} />
         )}
-        {activeTab === 'analytics' && (currentUser.role === 'staff' || currentUser.role === 'approver') && (
+        {activeTab === 'analytics' && isPrivileged && (
           <DashboardPage currentUser={currentUser} />
         )}
+        {activeTab === 'evaluation' && isPrivileged && <EvaluationPage />}
+        {activeTab === 'kb' && isPrivileged && <KnowledgeBasePage />}
+        {activeTab === 'roadmap' && isPrivileged && <RoadmapPage />}
       </main>
     </div>
   );

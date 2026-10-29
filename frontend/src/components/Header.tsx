@@ -2,9 +2,11 @@ import React from 'react';
 import type { UserProfile } from '../types';
 import { colors } from '../theme/colors';
 
+export type ActiveTab = 'chat' | 'approvals' | 'analytics' | 'evaluation' | 'kb' | 'roadmap';
+
 interface HeaderProps {
-  activeTab: 'chat' | 'approvals' | 'analytics';
-  onSelectTab: (tab: 'chat' | 'approvals' | 'analytics') => void;
+  activeTab: ActiveTab;
+  onSelectTab: (tab: ActiveTab) => void;
   currentUser: UserProfile;
   availableUsers: UserProfile[];
   onSelectUser: (user: UserProfile) => void;
@@ -23,6 +25,8 @@ export const Header: React.FC<HeaderProps> = ({
   latencyMs,
   pendingCount = 0,
 }) => {
+  const isPrivileged = currentUser.role === 'staff' || currentUser.role === 'approver';
+
   return (
     <header className="tl-header">
       <div className="tl-header-left">
@@ -56,14 +60,52 @@ export const Header: React.FC<HeaderProps> = ({
             </button>
           )}
 
-          {(currentUser.role === 'staff' || currentUser.role === 'approver') && (
+          {isPrivileged && (
             <button
               className={`tl-nav-btn ${activeTab === 'analytics' ? 'active' : ''}`}
               onClick={() => onSelectTab('analytics')}
             >
               <span className="tl-nav-icon">📊</span>
-              Audit & Analytics
+              Audit &amp; Analytics
             </button>
+          )}
+
+          {/* Project Review Group (Staff & Approver only) */}
+          {isPrivileged && (
+            <>
+              <div
+                style={{
+                  width: '1px',
+                  height: '24px',
+                  backgroundColor: 'rgba(255, 255, 255, 0.25)',
+                  margin: 'auto 0.35rem',
+                }}
+              />
+              <button
+                className={`tl-nav-btn ${activeTab === 'evaluation' ? 'active' : ''}`}
+                onClick={() => onSelectTab('evaluation')}
+                title="Evaluation Suite & Ablation Study"
+              >
+                <span className="tl-nav-icon">📈</span>
+                Evaluation
+              </button>
+              <button
+                className={`tl-nav-btn ${activeTab === 'kb' ? 'active' : ''}`}
+                onClick={() => onSelectTab('kb')}
+                title="Access-Aware Knowledge Base"
+              >
+                <span className="tl-nav-icon">📚</span>
+                Knowledge Base
+              </button>
+              <button
+                className={`tl-nav-btn ${activeTab === 'roadmap' ? 'active' : ''}`}
+                onClick={() => onSelectTab('roadmap')}
+                title="System Roadmap & Implemented Features"
+              >
+                <span className="tl-nav-icon">🗺️</span>
+                Roadmap
+              </button>
+            </>
           )}
         </nav>
       </div>
