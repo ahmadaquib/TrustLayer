@@ -1,0 +1,11 @@
+{
+  "id": "f0000001-0000-0000-0000-000000000001",
+  "title": "Overdraft Protection and Fee Schedule",
+  "content": "Standard checking accounts include an optional $100 overdraft buffer for qualifying accounts in good standing. Transactions that exceed the account balance within the buffer incur no penalty fee if repaid within 48 hours. Overdraft transactions exceeding the buffer incur a standard $35 overdraft fee per transaction, capped at a maximum of three fees ($105 total) in a single business day. Accounts open fewer than 90 days are not eligible for the buffer.",
+  "source": "synthetic",
+  "role_scope": [
+    "customer",
+    "staff",
+    "approver"
+  ]
+}

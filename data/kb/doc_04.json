@@ -1,0 +1,11 @@
+{
+  "id": "f0000001-0000-0000-0000-000000000004",
+  "title": "Debit Card Emergency Blocking and Fraud Prevention",
+  "content": "Customers can request an immediate card freeze or emergency block at any time via the automated assistant, mobile app, or phone. A temporary freeze can be reversed by the customer within 30 days. However, cards reported lost or stolen are permanently canceled and cannot be unblocked under any circumstances. A replacement debit card is issued automatically and arrives within 3 to 5 business days.",
+  "source": "synthetic",
+  "role_scope": [
+    "customer",
+    "staff",
+    "approver"
+  ]
+}

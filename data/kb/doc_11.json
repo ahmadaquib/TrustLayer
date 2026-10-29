@@ -1,0 +1,11 @@
+{
+  "id": "f0000001-0000-0000-0000-000000000011",
+  "title": "Check Deposit Availability and Extended Hold Terms",
+  "content": "Under Regulation CC standards, the first $500 of deposited checks (mobile or ATM) is made available on the next business day. The remaining balance is available on the second business day. Deposits over $5,525, deposits into accounts open less than 30 days, or checks with unverified issuer funds are subject to exception holds extending up to 7 business days.",
+  "source": "synthetic",
+  "role_scope": [
+    "customer",
+    "staff",
+    "approver"
+  ]
+}

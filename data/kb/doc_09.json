@@ -1,0 +1,11 @@
+{
+  "id": "f0000001-0000-0000-0000-000000000009",
+  "title": "Personal and Auto Loan Grace Period and Late Charges",
+  "content": "Monthly installment payments for consumer auto and personal loans have a strict 10-calendar-day grace period following the scheduled due date. Payments received on or before the 10th day incur no late fee. Payments received on day 11 or later incur a late charge of 5% of the unpaid monthly installment or $25, whichever is greater. Interest continues to accrue during the grace period.",
+  "source": "synthetic",
+  "role_scope": [
+    "customer",
+    "staff",
+    "approver"
+  ]
+}

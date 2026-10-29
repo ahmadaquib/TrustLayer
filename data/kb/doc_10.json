@@ -1,0 +1,10 @@
+{
+  "id": "f0000001-0000-0000-0000-000000000010",
+  "title": "Manager Escalation and Human-in-the-Loop Thresholds",
+  "content": "INTERNAL POLICY FOR APPROVAL WORKFLOW: Customer requests that involve financial restitution over $100, wire limit increases above $25,000, or actions where automated grounding verification scores fall below 0.40 on money-moving tools cannot be resolved by front-line staff. These actions must be queued in the Approver Portal for Senior Staff review and signed off prior to ledger execution.",
+  "source": "synthetic",
+  "role_scope": [
+    "staff",
+    "approver"
+  ]
+}

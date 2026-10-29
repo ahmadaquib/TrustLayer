@@ -1,0 +1,11 @@
+{
+  "id": "f0000001-0000-0000-0000-000000000003",
+  "title": "Daily Electronic Transfer and Withdrawal Limits",
+  "content": "Customers using digital online banking are subject to a daily electronic transfer limit of $2,500 for external ACH and P2P transfers. ATM cash withdrawals are limited to $1,000 per card per 24-hour cycle. Bank staff may authorize temporary limit increases up to $10,000 upon positive identity verification. Permanent limit increases or single transfers exceeding $10,000 strictly require manager/approver review.",
+  "source": "synthetic",
+  "role_scope": [
+    "customer",
+    "staff",
+    "approver"
+  ]
+}

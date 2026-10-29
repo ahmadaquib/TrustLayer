@@ -1,0 +1,11 @@
+{
+  "id": "f0000001-0000-0000-0000-000000000007",
+  "title": "Checking Account Monthly Maintenance Fee Exemption",
+  "content": "The standard checking account carries a monthly maintenance fee of $12. This fee is automatically waived if the customer maintains a minimum daily ledger balance of at least $500 throughout the statement cycle, or receives qualifying direct deposits totaling at least $1,000 per month. Student accounts under age 24 are permanently exempt from monthly maintenance fees.",
+  "source": "synthetic",
+  "role_scope": [
+    "customer",
+    "staff",
+    "approver"
+  ]
+}

@@ -1,0 +1,11 @@
+{
+  "id": "f0000001-0000-0000-0000-000000000002",
+  "title": "Courtesy Fee Waiver Policy",
+  "content": "Customers may receive up to two courtesy fee waivers per calendar year for late payment or overdraft fees, provided the account has been maintained with no chargeback disputes for at least six consecutive months. Standard front-line staff can process waivers up to $50 per occurrence. Any waiver request exceeding $50 or any request for a third waiver in a year requires authorization from a Senior Staff / Approver.",
+  "source": "synthetic",
+  "role_scope": [
+    "customer",
+    "staff",
+    "approver"
+  ]
+}

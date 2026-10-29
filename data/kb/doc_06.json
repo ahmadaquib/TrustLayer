@@ -1,0 +1,11 @@
+{
+  "id": "f0000001-0000-0000-0000-000000000006",
+  "title": "Domestic and International Wire Transfer Guidelines",
+  "content": "Domestic wire requests submitted before 4:00 PM EST on business days are processed same-day with a fixed fee of $25. Incoming domestic wires are free of charge. International wire transfers require 1 to 3 business days for completion, incur a $45 outgoing transfer fee, and require full recipient SWIFT/BIC and IBAN details. Wire cancellation is only possible before release to the network.",
+  "source": "synthetic",
+  "role_scope": [
+    "customer",
+    "staff",
+    "approver"
+  ]
+}

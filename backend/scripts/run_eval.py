@@ -172,7 +172,10 @@ def load_evaluation_cases(eval_dir: pathlib.Path) -> list[dict[str, Any]]:
 
 async def run_evaluation(target_mode: str = "all") -> None:
     # Resolve directory paths for evaluation files and benchmark datasets
-    eval_dir = pathlib.Path(__file__).resolve().parent
+    project_root = pathlib.Path(__file__).resolve().parent.parent.parent
+    eval_dir = project_root / "data" / "eval"
+    results_dir = project_root / "data" / "results"
+    results_dir.mkdir(parents=True, exist_ok=True)
     cases = load_evaluation_cases(eval_dir)
     print(f"Loaded {len(cases)} evaluation test cases from {eval_dir}.")
 
@@ -198,7 +201,7 @@ async def run_evaluation(target_mode: str = "all") -> None:
             print(f"[{idx:02d}/{len(cases):02d}] [{current_mode}] {record['case id']} ({record['bucket']}): expected={record['expected']}, actual={record['actual']}, correct={record['correct']}")
 
     # Write ablation results to ablation_results.csv
-    ablation_file = eval_dir / "ablation_results.csv"
+    ablation_file = results_dir / "ablation_results.csv"
     ablation_fields = ["case id", "bucket", "mode", "expected", "actual", "correct"]
     with open(ablation_file, "w", newline="", encoding="utf-8") as csvfile:
         writer = csv.DictWriter(csvfile, fieldnames=ablation_fields, extrasaction="ignore")
@@ -208,7 +211,7 @@ async def run_evaluation(target_mode: str = "all") -> None:
 
     # Write full pipeline results to results.csv if full mode was executed
     if full_results:
-        results_file = eval_dir / "results.csv"
+        results_file = results_dir / "results.csv"
         results_fields = ["case id", "bucket", "expected", "actual", "risk score", "grounding score", "latency"]
         with open(results_file, "w", newline="", encoding="utf-8") as csvfile:
             writer = csv.DictWriter(csvfile, fieldnames=results_fields, extrasaction="ignore")

@@ -6,9 +6,13 @@ Populates:
 2. Synthetic users across all roles
 3. Accounts with balances for customers
 4. Sample transactions across accounts
+
+Seed data is loaded from data/seed/*.json in the project root.
 """
 
 import asyncio
+import json
+import pathlib
 import uuid
 from datetime import datetime, timedelta
 from decimal import Decimal
@@ -16,6 +20,20 @@ from decimal import Decimal
 from sqlalchemy import select
 from trustlayer.db.models import Account, Role, Transaction, User
 from trustlayer.db.session import async_session, engine
+
+# Resolve seed data directory relative to the project root
+_THIS_DIR = pathlib.Path(__file__).resolve().parent
+_PROJECT_ROOT = _THIS_DIR.parent.parent.parent.parent  # backend/src/trustlayer/db -> root
+_SEED_DIR = _PROJECT_ROOT / "data" / "seed"
+
+
+def _load_json(filename: str) -> list[dict]:
+    """Load a JSON file from data/seed/."""
+    path = _SEED_DIR / filename
+    if not path.exists():
+        raise FileNotFoundError(f"Seed data file not found: {path}")
+    with open(path, "r", encoding="utf-8") as f:
+        return json.load(f)
 
 
 async def seed_data() -> None:
@@ -41,68 +59,26 @@ async def seed_data() -> None:
         res_users = await session.execute(select(User))
         existing_users = {u.email: u for u in res_users.scalars().all()}
 
-        users_to_create = [
-            # Customers
-            {
-                "id": uuid.UUID("11111111-1111-1111-1111-111111111111"),
-                "name": "Alice Johnson",
-                "email": "alice.johnson@example.com",
-                "role": roles["customer"],
-                "created_at": datetime.utcnow() - timedelta(days=60),
-            },
-            {
-                "id": uuid.UUID("22222222-2222-2222-2222-222222222222"),
-                "name": "Bob Smith",
-                "email": "bob.smith@example.com",
-                "role": roles["customer"],
-                "created_at": datetime.utcnow() - timedelta(days=45),
-            },
-            {
-                "id": uuid.UUID("33333333-3333-3333-3333-333333333333"),
-                "name": "Charlie Brown",
-                "email": "charlie.brown@example.com",
-                "role": roles["customer"],
-                "created_at": datetime.utcnow() - timedelta(days=30),
-            },
-            # Staff
-            {
-                "id": uuid.UUID("44444444-4444-4444-4444-444444444444"),
-                "name": "Sarah Davis",
-                "email": "sarah.davis@banktrust.internal",
-                "role": roles["staff"],
-                "created_at": datetime.utcnow() - timedelta(days=90),
-            },
-            {
-                "id": uuid.UUID("55555555-5555-5555-5555-555555555555"),
-                "name": "David Miller",
-                "email": "david.miller@banktrust.internal",
-                "role": roles["staff"],
-                "created_at": datetime.utcnow() - timedelta(days=75),
-            },
-            # Approver
-            {
-                "id": uuid.UUID("66666666-6666-6666-6666-666666666666"),
-                "name": "Eleanor Vance",
-                "email": "eleanor.vance@banktrust.internal",
-                "role": roles["approver"],
-                "created_at": datetime.utcnow() - timedelta(days=120),
-            },
-        ]
+        # Load user definitions from data/seed/users.json
+        users_data = _load_json("users.json")
+        now = datetime.utcnow()
 
         created_users: dict[str, User] = {}
-        for u_data in users_to_create:
-            if u_data["email"] in existing_users:
-                created_users[u_data["email"]] = existing_users[u_data["email"]]
+        for u_data in users_data:
+            email = u_data["email"]
+            if email in existing_users:
+                created_users[email] = existing_users[email]
             else:
+                offset_days = u_data.get("created_at_offset_days", 0)
                 user = User(
-                    id=u_data["id"],
+                    id=uuid.UUID(u_data["id"]),
                     name=u_data["name"],
-                    email=u_data["email"],
-                    role_id=u_data["role"].id,
-                    created_at=u_data["created_at"],
+                    email=email,
+                    role_id=roles[u_data["role"]].id,
+                    created_at=now + timedelta(days=offset_days),
                 )
                 session.add(user)
-                created_users[u_data["email"]] = user
+                created_users[email] = user
 
         await session.flush()
 
@@ -110,49 +86,23 @@ async def seed_data() -> None:
         res_accounts = await session.execute(select(Account))
         existing_account_ids = {a.id for a in res_accounts.scalars().all()}
 
-        alice = created_users["alice.johnson@example.com"]
-        bob = created_users["bob.smith@example.com"]
-        charlie = created_users["charlie.brown@example.com"]
+        # Build email -> user lookup
+        email_to_user = created_users
 
-        accounts_to_create = [
-            {
-                "id": uuid.UUID("a1111111-1111-1111-1111-111111111111"),
-                "user_id": alice.id,
-                "balance": Decimal("5420.50"),
-                "account_type": "checking",
-            },
-            {
-                "id": uuid.UUID("a1111111-1111-1111-1111-222222222222"),
-                "user_id": alice.id,
-                "balance": Decimal("12850.00"),
-                "account_type": "savings",
-            },
-            {
-                "id": uuid.UUID("b2222222-2222-2222-2222-111111111111"),
-                "user_id": bob.id,
-                "balance": Decimal("1250.75"),
-                "account_type": "checking",
-            },
-            {
-                "id": uuid.UUID("c3333333-3333-3333-3333-111111111111"),
-                "user_id": charlie.id,
-                "balance": Decimal("340.00"),
-                "account_type": "checking",
-            },
-        ]
-
-        created_accounts: dict[uuid.UUID, Account] = {}
-        for acc_data in accounts_to_create:
-            if acc_data["id"] in existing_account_ids:
+        # Load account definitions from data/seed/accounts.json
+        accounts_data = _load_json("accounts.json")
+        for acc_data in accounts_data:
+            acc_id = uuid.UUID(acc_data["id"])
+            if acc_id in existing_account_ids:
                 continue
+            user = email_to_user[acc_data["user_email"]]
             account = Account(
-                id=acc_data["id"],
-                user_id=acc_data["user_id"],
-                balance=acc_data["balance"],
+                id=acc_id,
+                user_id=user.id,
+                balance=Decimal(acc_data["balance"]),
                 account_type=acc_data["account_type"],
             )
             session.add(account)
-            created_accounts[acc_data["id"]] = account
 
         await session.flush()
 
@@ -160,68 +110,21 @@ async def seed_data() -> None:
         res_transactions = await session.execute(select(Transaction))
         existing_tx_ids = {t.id for t in res_transactions.scalars().all()}
 
-        now = datetime.utcnow()
-        transactions_to_create = [
-            {
-                "id": uuid.UUID("d1111111-1111-1111-1111-111111111111"),
-                "account_id": uuid.UUID("a1111111-1111-1111-1111-111111111111"),
-                "amount": Decimal("45.20"),
-                "type": "debit",
-                "status": "completed",
-                "created_at": now - timedelta(days=2),
-            },
-            {
-                "id": uuid.UUID("d1111111-1111-1111-1111-222222222222"),
-                "account_id": uuid.UUID("a1111111-1111-1111-1111-111111111111"),
-                "amount": Decimal("2500.00"),
-                "type": "credit",
-                "status": "completed",
-                "created_at": now - timedelta(days=5),
-            },
-            {
-                "id": uuid.UUID("d1111111-1111-1111-1111-333333333333"),
-                "account_id": uuid.UUID("a1111111-1111-1111-1111-111111111111"),
-                "amount": Decimal("300.00"),
-                "type": "transfer",
-                "status": "completed",
-                "created_at": now - timedelta(hours=12),
-            },
-            {
-                "id": uuid.UUID("d2222222-2222-2222-2222-111111111111"),
-                "account_id": uuid.UUID("b2222222-2222-2222-2222-111111111111"),
-                "amount": Decimal("120.00"),
-                "type": "debit",
-                "status": "completed",
-                "created_at": now - timedelta(days=1),
-            },
-            {
-                "id": uuid.UUID("d2222222-2222-2222-2222-222222222222"),
-                "account_id": uuid.UUID("b2222222-2222-2222-2222-111111111111"),
-                "amount": Decimal("75.00"),
-                "type": "dispute",
-                "status": "pending",
-                "created_at": now - timedelta(hours=3),
-            },
-            {
-                "id": uuid.UUID("d3333333-3333-3333-3333-111111111111"),
-                "account_id": uuid.UUID("c3333333-3333-3333-3333-111111111111"),
-                "amount": Decimal("500.00"),
-                "type": "transfer",
-                "status": "blocked",
-                "created_at": now - timedelta(hours=1),
-            },
-        ]
-
-        for tx_data in transactions_to_create:
-            if tx_data["id"] in existing_tx_ids:
+        # Load transaction definitions from data/seed/transactions.json
+        transactions_data = _load_json("transactions.json")
+        for tx_data in transactions_data:
+            tx_id = uuid.UUID(tx_data["id"])
+            if tx_id in existing_tx_ids:
                 continue
+            offset_days = tx_data.get("created_at_offset_days", 0)
+            offset_hours = tx_data.get("created_at_offset_hours", 0)
             tx = Transaction(
-                id=tx_data["id"],
-                account_id=tx_data["account_id"],
-                amount=tx_data["amount"],
+                id=tx_id,
+                account_id=uuid.UUID(tx_data["account_id"]),
+                amount=Decimal(tx_data["amount"]),
                 type=tx_data["type"],
                 status=tx_data["status"],
-                created_at=tx_data["created_at"],
+                created_at=now + timedelta(days=offset_days, hours=offset_hours),
             )
             session.add(tx)
 

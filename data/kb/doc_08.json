@@ -1,0 +1,10 @@
+{
+  "id": "f0000001-0000-0000-0000-000000000008",
+  "title": "Internal Sequence Anomaly and Anti-Draining Rules",
+  "content": "INTERNAL BANK COMPLIANCE ONLY: Automated monitoring flags account activity as a sequence anomaly when an account balance inquiry is followed within five minutes by a transfer or withdrawal request exceeding 85% of total account funds. Such transactions must not execute automatically; the session must be routed for step-up multi-factor re-authentication or human approver sign-off.",
+  "source": "synthetic",
+  "role_scope": [
+    "staff",
+    "approver"
+  ]
+}

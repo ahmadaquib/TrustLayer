@@ -1,0 +1,11 @@
+{
+  "id": "f0000001-0000-0000-0000-000000000012",
+  "title": "International Travel and Foreign Transaction Assessments",
+  "content": "Debit card purchases made in foreign currencies or processed outside the United States are subject to an international transaction fee of 3% of the total purchase amount. Customers traveling internationally should place a travel notice on their debit card via mobile banking at least 24 hours prior to travel to prevent card activity from being blocked by automated fraud filters.",
+  "source": "synthetic",
+  "role_scope": [
+    "customer",
+    "staff",
+    "approver"
+  ]
+}
