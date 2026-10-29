@@ -40,6 +40,7 @@ const ALL_DOCUMENTS: KBDocument[] = [
 export const KnowledgeBasePage: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [selectedRoleScope, setSelectedRoleScope] = useState<string>('all');
+  const [copiedId, setCopiedId] = useState<string | null>(null);
 
   const filteredDocs = useMemo(() => {
     return ALL_DOCUMENTS.filter((doc) => {
@@ -62,18 +63,33 @@ export const KnowledgeBasePage: React.FC = () => {
     });
   }, [searchQuery, selectedRoleScope]);
 
+  const handleCopyId = (id: string) => {
+    navigator.clipboard?.writeText(id);
+    setCopiedId(id);
+    setTimeout(() => setCopiedId(null), 2000);
+  };
+
   return (
-    <div className="tl-page-container" style={{ maxWidth: '1100px', margin: '0 auto', padding: '1.5rem 1rem' }}>
-      <div style={{ marginBottom: '1.5rem' }}>
-        <h1 style={{ fontSize: '1.6rem', fontWeight: 700, color: '#0F172A', marginBottom: '0.35rem' }}>
-          Banking Policy Knowledge Base
-        </h1>
-        <p style={{ color: '#475569', fontSize: '0.92rem' }}>
-          Authoritative policy documents used for access-aware RAG retrieval and NLI claim grounding.
-        </p>
+    <div style={{ maxWidth: '1200px', margin: '0 auto', display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+      {/* Page Header */}
+      <div className="tl-page-header" style={{ marginBottom: 0 }}>
+        <div>
+          <h1 className="tl-page-title">Banking Policy Knowledge Base</h1>
+          <p className="tl-page-subtitle">
+            Authoritative documents indexed via BGE-M3 1024-d embeddings into pgvector for role-scoped retrieval.
+          </p>
+        </div>
+        <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+          <span style={{ fontSize: '0.78rem', background: '#DBEAFE', color: '#1D4ED8', padding: '0.25rem 0.65rem', borderRadius: '6px', fontWeight: 700 }}>
+            12 Active Policies
+          </span>
+          <span style={{ fontSize: '0.78rem', background: '#EDE9FE', color: '#6D28D9', padding: '0.25rem 0.65rem', borderRadius: '6px', fontWeight: 700 }}>
+            Role-Scoped RAG
+          </span>
+        </div>
       </div>
 
-      {/* Controls & Search */}
+      {/* Controls & Search Card */}
       <div
         style={{
           display: 'flex',
@@ -82,18 +98,17 @@ export const KnowledgeBasePage: React.FC = () => {
           flexWrap: 'wrap',
           gap: '1rem',
           backgroundColor: '#FFFFFF',
-          padding: '1rem 1.25rem',
-          borderRadius: '8px',
+          padding: '1rem 1.4rem',
+          borderRadius: '10px',
           border: '1px solid #E2E8F0',
-          marginBottom: '1.5rem',
-          boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
+          boxShadow: 'var(--tl-shadow-sm)',
         }}
       >
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flex: 1, minWidth: '280px' }}>
-          <span style={{ color: '#94A3B8' }}>🔍</span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flex: 1, minWidth: '300px' }}>
+          <span style={{ color: '#94A3B8', fontSize: '1.1rem' }}>🔍</span>
           <input
             type="text"
-            placeholder="Search documents by title, policy clause, or scope..."
+            placeholder="Search documents by policy title, rule clauses, or keyword..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             style={{
@@ -102,17 +117,25 @@ export const KnowledgeBasePage: React.FC = () => {
               outline: 'none',
               fontSize: '0.92rem',
               color: '#0F172A',
+              fontWeight: 500,
             }}
           />
           {searchQuery && (
             <button
               onClick={() => setSearchQuery('')}
               style={{
-                background: 'none',
+                background: '#F1F5F9',
                 border: 'none',
-                color: '#94A3B8',
+                color: '#64748B',
                 cursor: 'pointer',
-                fontWeight: 600,
+                fontWeight: 700,
+                borderRadius: '50%',
+                width: '20px',
+                height: '20px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                fontSize: '0.7rem',
               }}
             >
               ✕
@@ -121,59 +144,54 @@ export const KnowledgeBasePage: React.FC = () => {
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-          <label style={{ fontSize: '0.85rem', color: '#64748B', fontWeight: 500 }}>Scope:</label>
+          <label style={{ fontSize: '0.84rem', color: '#64748B', fontWeight: 600 }}>Filter Scope:</label>
           <select
             value={selectedRoleScope}
             onChange={(e) => setSelectedRoleScope(e.target.value)}
-            style={{
-              padding: '0.35rem 0.65rem',
-              borderRadius: '6px',
-              border: '1px solid #CBD5E1',
-              fontSize: '0.85rem',
-              color: '#1E293B',
-              backgroundColor: '#FFFFFF',
-            }}
+            className="tl-select-filter"
           >
-            <option value="all">All Scopes</option>
+            <option value="all">All Scopes (12)</option>
             <option value="customer">Customer Accessible</option>
             <option value="staff">Staff Accessible</option>
             <option value="approver">Approver Accessible</option>
           </select>
-          <span style={{ fontSize: '0.85rem', color: '#64748B', marginLeft: '0.5rem' }}>
-            {filteredDocs.length} of {ALL_DOCUMENTS.length} docs
+          <span style={{ fontSize: '0.82rem', color: '#64748B', fontWeight: 600, marginLeft: '0.4rem' }}>
+            Showing {filteredDocs.length} of {ALL_DOCUMENTS.length} docs
           </span>
         </div>
       </div>
 
-      {/* Document List */}
+      {/* Document Cards List */}
       {filteredDocs.length === 0 ? (
         <div
           style={{
             textAlign: 'center',
-            padding: '3rem 1.5rem',
+            padding: '3.5rem 1.5rem',
             backgroundColor: '#FFFFFF',
-            borderRadius: '8px',
+            borderRadius: '10px',
             border: '1px solid #E2E8F0',
             color: '#64748B',
+            boxShadow: 'var(--tl-shadow-sm)',
           }}
         >
-          <div style={{ fontSize: '2rem', marginBottom: '0.5rem' }}>📄</div>
-          <p style={{ fontSize: '1.05rem', fontWeight: 500, color: '#334155', marginBottom: '0.25rem' }}>
-            No documents matched your query.
+          <div style={{ fontSize: '2.2rem', marginBottom: '0.5rem' }}>📄</div>
+          <p style={{ fontSize: '1.1rem', fontWeight: 700, color: '#334155', marginBottom: '0.25rem' }}>
+            No policy documents matched your query.
           </p>
-          <p style={{ fontSize: '0.85rem' }}>Try clearing the search text or changing the role scope filter.</p>
+          <p style={{ fontSize: '0.88rem' }}>Try clearing the search query or selecting "All Scopes".</p>
         </div>
       ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '1.15rem' }}>
           {filteredDocs.map((doc, idx) => (
             <div
               key={doc.id}
               style={{
                 backgroundColor: '#FFFFFF',
-                borderRadius: '8px',
+                borderRadius: '10px',
                 border: '1px solid #E2E8F0',
-                padding: '1.25rem',
-                boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
+                padding: '1.4rem',
+                boxShadow: 'var(--tl-shadow-sm)',
+                transition: 'box-shadow 0.15s, border-color 0.15s',
               }}
             >
               {/* Card Header */}
@@ -183,20 +201,21 @@ export const KnowledgeBasePage: React.FC = () => {
                   justifyContent: 'space-between',
                   alignItems: 'flex-start',
                   flexWrap: 'wrap',
-                  gap: '0.5rem',
-                  marginBottom: '0.75rem',
+                  gap: '0.75rem',
+                  marginBottom: '0.85rem',
                 }}
               >
                 <div>
                   <span
                     style={{
-                      fontSize: '0.78rem',
-                      fontWeight: 700,
+                      fontSize: '0.74rem',
+                      fontWeight: 800,
                       color: '#2563EB',
-                      backgroundColor: '#DBEAFE',
-                      padding: '0.15rem 0.45rem',
+                      backgroundColor: '#EFF6FF',
+                      border: '1px solid #BFDBFE',
+                      padding: '0.15rem 0.5rem',
                       borderRadius: '4px',
-                      marginRight: '0.5rem',
+                      marginRight: '0.6rem',
                     }}
                   >
                     DOC #{String(idx + 1).padStart(2, '0')}
@@ -204,9 +223,10 @@ export const KnowledgeBasePage: React.FC = () => {
                   <h2
                     style={{
                       display: 'inline',
-                      fontSize: '1.1rem',
-                      fontWeight: 600,
+                      fontSize: '1.15rem',
+                      fontWeight: 800,
                       color: '#0F172A',
+                      letterSpacing: '-0.02em',
                     }}
                   >
                     {doc.title}
@@ -214,15 +234,16 @@ export const KnowledgeBasePage: React.FC = () => {
                 </div>
 
                 {/* Scope badges */}
-                <div style={{ display: 'flex', gap: '0.35rem', flexWrap: 'wrap' }}>
+                <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap', alignItems: 'center' }}>
                   {(doc.role_scope || []).map((scope) => (
                     <span
                       key={scope}
                       style={{
-                        fontSize: '0.75rem',
-                        fontWeight: 600,
-                        padding: '0.15rem 0.5rem',
-                        borderRadius: '4px',
+                        fontSize: '0.72rem',
+                        fontWeight: 800,
+                        padding: '0.2rem 0.55rem',
+                        borderRadius: '9999px',
+                        letterSpacing: '0.04em',
                         backgroundColor:
                           scope === 'customer'
                             ? '#E0F2FE'
@@ -235,25 +256,18 @@ export const KnowledgeBasePage: React.FC = () => {
                             : scope === 'staff'
                             ? '#B45309'
                             : '#6B21A8',
+                        border: `1px solid ${
+                          scope === 'customer'
+                            ? '#BAE6FD'
+                            : scope === 'staff'
+                            ? '#FDE68A'
+                            : '#E9D5FF'
+                        }`,
                       }}
                     >
                       {scope.toUpperCase()}
                     </span>
                   ))}
-                  {doc.tier && (
-                    <span
-                      style={{
-                        fontSize: '0.75rem',
-                        fontWeight: 600,
-                        padding: '0.15rem 0.5rem',
-                        borderRadius: '4px',
-                        backgroundColor: '#F1F5F9',
-                        color: '#475569',
-                      }}
-                    >
-                      {doc.tier}
-                    </span>
-                  )}
                   {doc.source && (
                     <span
                       style={{
@@ -262,6 +276,8 @@ export const KnowledgeBasePage: React.FC = () => {
                         borderRadius: '4px',
                         border: '1px solid #E2E8F0',
                         color: '#64748B',
+                        background: '#F8FAFC',
+                        fontWeight: 600,
                       }}
                     >
                       {doc.source}
@@ -274,21 +290,21 @@ export const KnowledgeBasePage: React.FC = () => {
               <div
                 style={{
                   backgroundColor: '#F8FAFC',
-                  borderRadius: '6px',
-                  padding: '0.9rem 1rem',
-                  fontSize: '0.9rem',
+                  borderRadius: '8px',
+                  padding: '1.1rem 1.25rem',
+                  fontSize: '0.92rem',
                   color: '#334155',
-                  lineHeight: 1.6,
+                  lineHeight: 1.65,
                   border: '1px solid #F1F5F9',
                 }}
               >
                 {doc.content}
               </div>
 
-              {/* Card Footer: Metadata */}
+              {/* Card Footer: Metadata & Copy ID */}
               <div
                 style={{
-                  marginTop: '0.75rem',
+                  marginTop: '0.85rem',
                   display: 'flex',
                   justifyContent: 'space-between',
                   alignItems: 'center',
@@ -296,9 +312,25 @@ export const KnowledgeBasePage: React.FC = () => {
                   color: '#94A3B8',
                 }}
               >
-                <span>
-                  UUID: <code>{doc.id}</code>
-                </span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                  <span>UUID:</span>
+                  <code style={{ background: '#F1F5F9', padding: '0.15rem 0.4rem', borderRadius: '4px', color: '#475569' }}>
+                    {doc.id}
+                  </code>
+                  <button
+                    onClick={() => handleCopyId(doc.id)}
+                    style={{
+                      background: 'none',
+                      border: 'none',
+                      color: copiedId === doc.id ? '#059669' : '#3B82F6',
+                      cursor: 'pointer',
+                      fontWeight: 600,
+                      fontSize: '0.74rem',
+                    }}
+                  >
+                    {copiedId === doc.id ? '✓ Copied' : 'Copy'}
+                  </button>
+                </div>
                 <span>Access-Aware pgvector RAG Index</span>
               </div>
             </div>
@@ -308,4 +340,3 @@ export const KnowledgeBasePage: React.FC = () => {
     </div>
   );
 };
-

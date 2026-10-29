@@ -24,17 +24,26 @@ export const RoadmapPage: React.FC = () => {
   const showPlanned = filter === 'all' || filter === 'planned';
 
   return (
-    <div className="tl-page-container" style={{ maxWidth: '1000px', margin: '0 auto', padding: '1.5rem 1rem' }}>
-      <div style={{ marginBottom: '1.5rem' }}>
-        <h1 style={{ fontSize: '1.6rem', fontWeight: 700, color: '#0F172A', marginBottom: '0.35rem' }}>
-          TrustLayer Architecture Roadmap
-        </h1>
-        <p style={{ color: '#475569', fontSize: '0.92rem' }}>
-          Current verified safety capabilities vs. planned enterprise platform extensions.
-        </p>
+    <div style={{ maxWidth: '1100px', margin: '0 auto', display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+      {/* Page Header */}
+      <div className="tl-page-header" style={{ marginBottom: 0 }}>
+        <div>
+          <h1 className="tl-page-title">TrustLayer Architecture Roadmap</h1>
+          <p className="tl-page-subtitle">
+            Current verified safety capabilities vs. planned enterprise platform extensions.
+          </p>
+        </div>
+        <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+          <span style={{ fontSize: '0.78rem', background: '#D1FAE5', color: '#065F46', padding: '0.25rem 0.65rem', borderRadius: '6px', fontWeight: 700 }}>
+            {implementedList.length} Implemented
+          </span>
+          <span style={{ fontSize: '0.78rem', background: '#EDE9FE', color: '#6D28D9', padding: '0.25rem 0.65rem', borderRadius: '6px', fontWeight: 700 }}>
+            {plannedList.length} Planned
+          </span>
+        </div>
       </div>
 
-      {/* Filter Tabs & Summary Counter */}
+      {/* Filter Tabs & Status Bar */}
       <div
         style={{
           display: 'flex',
@@ -43,127 +52,119 @@ export const RoadmapPage: React.FC = () => {
           flexWrap: 'wrap',
           gap: '1rem',
           backgroundColor: '#FFFFFF',
-          padding: '0.75rem 1.25rem',
-          borderRadius: '8px',
+          padding: '0.85rem 1.4rem',
+          borderRadius: '10px',
           border: '1px solid #E2E8F0',
-          marginBottom: '1.5rem',
-          boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
+          boxShadow: 'var(--tl-shadow-sm)',
         }}
       >
         <div style={{ display: 'flex', gap: '0.5rem' }}>
           <button
             onClick={() => setFilter('all')}
+            className={`tl-btn-secondary ${filter === 'all' ? 'active' : ''}`}
             style={{
-              padding: '0.4rem 0.85rem',
-              borderRadius: '6px',
-              border: filter === 'all' ? '1px solid #2563EB' : '1px solid #CBD5E1',
-              backgroundColor: filter === 'all' ? '#DBEAFE' : '#FFFFFF',
+              backgroundColor: filter === 'all' ? '#EFF6FF' : '#FFFFFF',
+              borderColor: filter === 'all' ? '#3B82F6' : '#CBD5E1',
               color: filter === 'all' ? '#1D4ED8' : '#475569',
-              fontWeight: filter === 'all' ? 600 : 500,
-              cursor: 'pointer',
-              fontSize: '0.85rem',
+              fontWeight: filter === 'all' ? 700 : 500,
             }}
           >
-            All Items ({implementedList.length + plannedList.length})
+            All Milestones ({implementedList.length + plannedList.length})
           </button>
           <button
             onClick={() => setFilter('implemented')}
+            className={`tl-btn-secondary ${filter === 'implemented' ? 'active' : ''}`}
             style={{
-              padding: '0.4rem 0.85rem',
-              borderRadius: '6px',
-              border: filter === 'implemented' ? '1px solid #059669' : '1px solid #CBD5E1',
-              backgroundColor: filter === 'implemented' ? '#D1FAE5' : '#FFFFFF',
-              color: filter === 'implemented' ? '#065F46' : '#475569',
-              fontWeight: filter === 'implemented' ? 600 : 500,
-              cursor: 'pointer',
-              fontSize: '0.85rem',
+              backgroundColor: filter === 'implemented' ? '#ECFDF5' : '#FFFFFF',
+              borderColor: filter === 'implemented' ? '#10B981' : '#CBD5E1',
+              color: filter === 'implemented' ? '#047857' : '#475569',
+              fontWeight: filter === 'implemented' ? 700 : 500,
             }}
           >
-            Implemented ({implementedList.length})
+            ✓ Implemented ({implementedList.length})
           </button>
           <button
             onClick={() => setFilter('planned')}
+            className={`tl-btn-secondary ${filter === 'planned' ? 'active' : ''}`}
             style={{
-              padding: '0.4rem 0.85rem',
-              borderRadius: '6px',
-              border: filter === 'planned' ? '1px solid #7C3AED' : '1px solid #CBD5E1',
-              backgroundColor: filter === 'planned' ? '#EDE9FE' : '#FFFFFF',
+              backgroundColor: filter === 'planned' ? '#F5F3FF' : '#FFFFFF',
+              borderColor: filter === 'planned' ? '#8B5CF6' : '#CBD5E1',
               color: filter === 'planned' ? '#6D28D9' : '#475569',
-              fontWeight: filter === 'planned' ? 600 : 500,
-              cursor: 'pointer',
-              fontSize: '0.85rem',
+              fontWeight: filter === 'planned' ? 700 : 500,
             }}
           >
-            Planned ({plannedList.length})
+            🎯 Planned ({plannedList.length})
           </button>
         </div>
 
-        <div style={{ fontSize: '0.82rem', color: '#64748B' }}>
-          Stage: <strong>Friday Review Baseline</strong>
+        <div style={{ fontSize: '0.84rem', color: '#64748B', fontWeight: 500 }}>
+          Architecture Baseline: <strong style={{ color: '#0F172A' }}>Friday Review</strong>
         </div>
       </div>
 
       {/* IMPLEMENTED SECTION */}
       {showImplemented && (
-        <div style={{ marginBottom: '2.5rem' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', marginBottom: '1rem' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
             <span
               style={{
                 backgroundColor: '#D1FAE5',
                 color: '#065F46',
-                fontWeight: 700,
+                fontWeight: 800,
                 fontSize: '0.78rem',
-                padding: '0.2rem 0.6rem',
+                padding: '0.2rem 0.65rem',
                 borderRadius: '9999px',
                 border: '1px solid #A7F3D0',
               }}
             >
               {implementedList.length} VERIFIED
             </span>
-            <h2 style={{ fontSize: '1.25rem', fontWeight: 700, color: '#0F172A' }}>
+            <h2 style={{ fontSize: '1.25rem', fontWeight: 800, color: '#0F172A', letterSpacing: '-0.02em' }}>
               Implemented System Capabilities
             </h2>
           </div>
 
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem' }}>
             {implementedList.map((item, idx) => (
               <div
                 key={item.id}
                 style={{
                   backgroundColor: '#FFFFFF',
-                  borderRadius: '8px',
+                  borderRadius: '10px',
                   border: '1px solid #E2E8F0',
-                  padding: '1rem 1.25rem',
+                  padding: '1.15rem 1.35rem',
                   display: 'flex',
                   alignItems: 'flex-start',
                   justifyContent: 'space-between',
                   gap: '1rem',
-                  boxShadow: '0 1px 2px rgba(0,0,0,0.03)',
+                  boxShadow: 'var(--tl-shadow-sm)',
                   borderLeft: '4px solid #059669',
+                  transition: 'transform 0.15s, box-shadow 0.15s',
                 }}
               >
                 <div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.25rem' }}>
-                    <span style={{ fontSize: '0.78rem', color: '#94A3B8', fontWeight: 600 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.35rem' }}>
+                    <span style={{ fontSize: '0.75rem', color: '#94A3B8', fontWeight: 700 }}>
                       #{String(idx + 1).padStart(2, '0')}
                     </span>
-                    <h3 style={{ fontSize: '1rem', fontWeight: 600, color: '#0F172A' }}>{item.title}</h3>
+                    <h3 style={{ fontSize: '1.05rem', fontWeight: 700, color: '#0F172A' }}>{item.title}</h3>
                   </div>
-                  <p style={{ fontSize: '0.88rem', color: '#334155', lineHeight: 1.5 }}>{item.note}</p>
+                  <p style={{ fontSize: '0.9rem', color: '#334155', lineHeight: 1.55 }}>{item.note}</p>
                 </div>
                 <span
                   style={{
                     backgroundColor: '#D1FAE5',
                     color: '#065F46',
                     fontSize: '0.72rem',
-                    fontWeight: 700,
-                    padding: '0.2rem 0.55rem',
-                    borderRadius: '4px',
+                    fontWeight: 800,
+                    padding: '0.25rem 0.65rem',
+                    borderRadius: '9999px',
                     whiteSpace: 'nowrap',
-                    letterSpacing: '0.5px',
+                    letterSpacing: '0.04em',
+                    border: '1px solid #A7F3D0',
                   }}
                 >
-                  {item.badge}
+                  ✓ {item.badge}
                 </span>
               </div>
             ))}
@@ -173,65 +174,67 @@ export const RoadmapPage: React.FC = () => {
 
       {/* PLANNED SECTION */}
       {showPlanned && (
-        <div style={{ marginBottom: '2.5rem' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', marginBottom: '1rem' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', marginTop: showImplemented ? '1rem' : 0 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
             <span
               style={{
                 backgroundColor: '#EDE9FE',
                 color: '#6D28D9',
-                fontWeight: 700,
+                fontWeight: 800,
                 fontSize: '0.78rem',
-                padding: '0.2rem 0.6rem',
+                padding: '0.2rem 0.65rem',
                 borderRadius: '9999px',
                 border: '1px solid #DDD6FE',
               }}
             >
               {plannedList.length} PLANNED
             </span>
-            <h2 style={{ fontSize: '1.25rem', fontWeight: 700, color: '#0F172A' }}>
-              Planned Roadmap &amp; Enhancements
+            <h2 style={{ fontSize: '1.25rem', fontWeight: 800, color: '#0F172A', letterSpacing: '-0.02em' }}>
+              Planned Roadmap &amp; Future Scope
             </h2>
           </div>
 
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem' }}>
             {plannedList.map((item, idx) => (
               <div
                 key={item.id}
                 style={{
                   backgroundColor: '#FFFFFF',
-                  borderRadius: '8px',
+                  borderRadius: '10px',
                   border: '1px solid #E2E8F0',
-                  padding: '1rem 1.25rem',
+                  padding: '1.15rem 1.35rem',
                   display: 'flex',
                   alignItems: 'flex-start',
                   justifyContent: 'space-between',
                   gap: '1rem',
-                  boxShadow: '0 1px 2px rgba(0,0,0,0.03)',
+                  boxShadow: 'var(--tl-shadow-sm)',
                   borderLeft: '4px solid #7C3AED',
+                  transition: 'transform 0.15s, box-shadow 0.15s',
                 }}
               >
                 <div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.25rem' }}>
-                    <span style={{ fontSize: '0.78rem', color: '#94A3B8', fontWeight: 600 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.35rem' }}>
+                    <span style={{ fontSize: '0.75rem', color: '#94A3B8', fontWeight: 700 }}>
                       #{String(idx + 1).padStart(2, '0')}
                     </span>
-                    <h3 style={{ fontSize: '1rem', fontWeight: 600, color: '#0F172A' }}>{item.title}</h3>
+                    <h3 style={{ fontSize: '1.05rem', fontWeight: 700, color: '#0F172A' }}>{item.title}</h3>
                   </div>
-                  <p style={{ fontSize: '0.88rem', color: '#475569', lineHeight: 1.5 }}>{item.note}</p>
+                  <p style={{ fontSize: '0.9rem', color: '#475569', lineHeight: 1.55 }}>{item.note}</p>
                 </div>
                 <span
                   style={{
                     backgroundColor: '#EDE9FE',
                     color: '#6D28D9',
                     fontSize: '0.72rem',
-                    fontWeight: 700,
-                    padding: '0.2rem 0.55rem',
-                    borderRadius: '4px',
+                    fontWeight: 800,
+                    padding: '0.25rem 0.65rem',
+                    borderRadius: '9999px',
                     whiteSpace: 'nowrap',
-                    letterSpacing: '0.5px',
+                    letterSpacing: '0.04em',
+                    border: '1px solid #DDD6FE',
                   }}
                 >
-                  {item.badge}
+                  🎯 {item.badge}
                 </span>
               </div>
             ))}
@@ -241,4 +244,3 @@ export const RoadmapPage: React.FC = () => {
     </div>
   );
 };
-

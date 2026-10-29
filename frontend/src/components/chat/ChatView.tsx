@@ -17,7 +17,8 @@ export const ChatView: React.FC<ChatViewProps> = ({ currentUser }) => {
       sender: 'agent',
       content:
         `Hello ${currentUser.name}! I am your TrustLayer banking assistant. ` +
-        `How can I assist you with your checking, savings, or debit card operations today?`,
+        `Every tool call is intercepted by our Dual-Verification Gateway (Access-Aware RAG & Policy Firewall). ` +
+        `How can I assist you with your checking, savings, or transfer operations today?`,
       timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
     },
   ]);
@@ -76,7 +77,7 @@ export const ChatView: React.FC<ChatViewProps> = ({ currentUser }) => {
       const errorMsg: ChatMessageItem = {
         id: `err_${Date.now()}`,
         sender: 'system',
-        content: `Error connecting to TrustLayer Gateway: ${err.message || 'Unknown network error'}. Please ensure backend is running.`,
+        content: `Error connecting to TrustLayer Gateway: ${err.message || 'Unknown network error'}. Please ensure backend is running on :8000.`,
         timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
       };
       setMessages((prev) => [...prev, errorMsg]);
@@ -91,7 +92,7 @@ export const ChatView: React.FC<ChatViewProps> = ({ currentUser }) => {
       await handleSendMessage('Check my checking account balance');
       setTimeout(() => {
         handleSendMessage(preset.message);
-      }, 300);
+      }, 350);
     } else {
       await handleSendMessage(preset.message);
     }
@@ -99,15 +100,27 @@ export const ChatView: React.FC<ChatViewProps> = ({ currentUser }) => {
 
   return (
     <div className="tl-chat-container">
+      {/* Chat Header with Quick Presets */}
       <div className="tl-chat-header-bar">
-        <div>
-          <h2 className="tl-chat-title">Banking Assistant Chat</h2>
-          <p className="tl-chat-subtitle">
-            User: <strong>{currentUser.name}</strong> ({currentUser.role.toUpperCase()}) • Session: {sessionId ? sessionId.slice(0, 8) : 'New'}
-          </p>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '0.75rem' }}>
+          <div>
+            <h2 className="tl-chat-title">Banking Assistant Chat</h2>
+            <p className="tl-chat-subtitle">
+              Authenticated: <strong>{currentUser.name}</strong> ({currentUser.role.toUpperCase()}) • Session:{' '}
+              <code>{sessionId ? sessionId.slice(0, 8) : 'New'}</code>
+            </p>
+          </div>
+          <div style={{ fontSize: '0.75rem', color: '#64748B', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+            <span style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: '#10B981', display: 'inline-block' }} />
+            <span>Dual-Path Interception Active</span>
+          </div>
         </div>
 
+        {/* Demo Presets Bar */}
         <div className="tl-quick-prompts-bar">
+          <span style={{ fontSize: '0.74rem', color: '#64748B', fontWeight: 600, alignSelf: 'center', marginRight: '0.25rem' }}>
+            TEST SCENARIOS:
+          </span>
           {PRESETS.map((preset) => {
             const badge = getDecisionBadgeStyles(preset.expected_decision);
             return (
@@ -116,18 +129,18 @@ export const ChatView: React.FC<ChatViewProps> = ({ currentUser }) => {
                 className="tl-chip-btn"
                 disabled={loading}
                 onClick={() => handleSelectPreset(preset)}
-                title={`Expected: ${preset.expected_decision.toUpperCase()}`}
+                title={`Simulate: ${preset.message} (Expected: ${preset.expected_decision.toUpperCase()})`}
               >
                 <span>{preset.label}</span>
                 <span
                   style={{
-                    fontSize: '0.68rem',
-                    padding: '1px 5px',
+                    fontSize: '0.65rem',
+                    padding: '0.1rem 0.4rem',
                     borderRadius: '4px',
                     backgroundColor: badge.bg,
                     color: badge.color,
                     border: `1px solid ${badge.border}`,
-                    fontWeight: 700,
+                    fontWeight: 800,
                   }}
                 >
                   {badge.label}
@@ -138,6 +151,7 @@ export const ChatView: React.FC<ChatViewProps> = ({ currentUser }) => {
         </div>
       </div>
 
+      {/* Messages Conversation Area */}
       <div className="tl-messages-area">
         {messages.map((msg) => {
           if (msg.sender === 'user') {
@@ -181,10 +195,10 @@ export const ChatView: React.FC<ChatViewProps> = ({ currentUser }) => {
                     <span className="tl-chip-dot" style={{ backgroundColor: badgeStyles.color }} />
                     <span className="tl-chip-title">
                       {msg.decision === 'allow'
-                        ? `Action Completed: ${msg.tool_called?.replace('_', ' ') || 'Allowed'}`
+                        ? `✓ Action Executed: ${msg.tool_called?.replace('_', ' ') || 'Allowed'}`
                         : msg.decision === 'approve'
-                        ? `Under Review: Routed for Senior Staff Approval (Ref: #${msg.decision_id?.slice(0, 8) || 'pending'})`
-                        : `Action Blocked: Security / Policy Restriction`}
+                        ? `⏳ Under Review: Held for Senior Sign-off (Ref: #${msg.decision_id?.slice(0, 8) || 'pending'})`
+                        : `🛡️ Action Blocked: Security / Policy Restriction`}
                     </span>
                     <span className="tl-badge-pill" style={{ backgroundColor: badgeStyles.color, color: '#fff' }}>
                       {badgeStyles.label}
@@ -192,20 +206,59 @@ export const ChatView: React.FC<ChatViewProps> = ({ currentUser }) => {
                   </div>
                 )}
 
+                {/* Response Message Body */}
                 <div className="tl-message-text">{msg.content}</div>
+
+                {/* Multi-source Risk Metrics Row (if decision made) */}
+                {msg.final_risk != null && (
+                  <div className="tl-decision-metrics-row">
+                    <span className="tl-metric-chip" title="Fused Risk Score (0.5 Grounding + 0.5 Policy)">
+                      Risk: {Number(msg.final_risk).toFixed(2)}
+                    </span>
+                    {msg.grounding_score != null && (
+                      <span
+                        className="tl-metric-chip"
+                        style={{
+                          color:
+                            msg.grounding_score >= 0.85
+                              ? '#059669'
+                              : msg.grounding_score < 0.4
+                              ? '#DC2626'
+                              : '#D97706',
+                        }}
+                        title="NLI Claim Grounding Score"
+                      >
+                        Grounding: {Number(msg.grounding_score).toFixed(2)}
+                      </span>
+                    )}
+                    {msg.policy_risk != null && (
+                      <span
+                        className="tl-metric-chip"
+                        style={{
+                          color: msg.policy_risk > 0.5 ? '#DC2626' : '#059669',
+                        }}
+                        title="RBAC and Sequence Anomaly Risk"
+                      >
+                        Policy Risk: {Number(msg.policy_risk).toFixed(2)}
+                      </span>
+                    )}
+                  </div>
+                )}
 
                 {/* Tool Result Inspection Card */}
                 {msg.tool_result && msg.tool_result.status === 'success' && (
                   <div className="tl-tool-result-box">
                     <div className="tl-tool-result-header">
-                      <span>✓ Execution Details: {msg.tool_called}</span>
+                      <span>✓ Mock Ledger Execution: {msg.tool_called}</span>
                     </div>
                     {msg.tool_result.accounts && (
                       <div className="tl-account-list">
                         {msg.tool_result.accounts.map((acc: any, idx: number) => (
                           <div key={idx} className="tl-account-row">
                             <span className="tl-acc-type">{acc.account_type}:</span>
-                            <span className="tl-acc-bal">${Number(acc.balance).toLocaleString('en-US', { minimumFractionDigits: 2 })}</span>
+                            <span className="tl-acc-bal">
+                              ${Number(acc.balance).toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                            </span>
                           </div>
                         ))}
                       </div>
@@ -214,7 +267,7 @@ export const ChatView: React.FC<ChatViewProps> = ({ currentUser }) => {
                       <div className="tl-tx-info">
                         Transaction ID: <code>{msg.tool_result.transaction_id.slice(0, 8)}...</code>
                         {msg.tool_result.new_balance !== undefined && (
-                          <span> • New Checking Balance: ${Number(msg.tool_result.new_balance).toFixed(2)}</span>
+                          <span> • New Balance: ${Number(msg.tool_result.new_balance).toFixed(2)}</span>
                         )}
                       </div>
                     )}
@@ -230,15 +283,18 @@ export const ChatView: React.FC<ChatViewProps> = ({ currentUser }) => {
         {loading && (
           <div className="tl-message-row agent">
             <div className="tl-avatar-agent">TL</div>
-            <div className="tl-bubble agent loading">
+            <div className="tl-bubble agent loading" style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
               <span className="tl-spinner" />
-              <span>Interception Gateway verifying grounding and policy checks...</span>
+              <span style={{ fontSize: '0.88rem', color: '#475569' }}>
+                Interception Gateway verifying grounding and policy checks...
+              </span>
             </div>
           </div>
         )}
         <div ref={messagesEndRef} />
       </div>
 
+      {/* Chat Input Bar */}
       <form
         className="tl-chat-input-bar"
         onSubmit={(e) => {
@@ -249,7 +305,7 @@ export const ChatView: React.FC<ChatViewProps> = ({ currentUser }) => {
         <input
           type="text"
           className="tl-chat-input"
-          placeholder="Ask a question or request an action (e.g. 'Transfer $50 to Bob')..."
+          placeholder="Ask a banking question or request an action (e.g. 'Transfer $25 to Bob')..."
           value={inputText}
           onChange={(e) => setInputText(e.target.value)}
           disabled={loading}
